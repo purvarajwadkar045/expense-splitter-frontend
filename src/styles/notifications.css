@@ -1,0 +1,159 @@
+/* Notification Feed Styles */
+.notifications-wrapper {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.notifications-header h1 {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--text-pure);
+  letter-spacing: -0.02em;
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notification-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.notification-card:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--glass-border-hover);
+}
+
+.notification-card.unread {
+  background: rgba(99, 102, 241, 0.03);
+  border-color: rgba(99, 102, 241, 0.15);
+}
+
+.notification-card.unread::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 36px;
+  background: var(--primary);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+}
+
+.notification-icon-box {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notification-card.expense .notification-icon-box {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.notification-card.settlement .notification-icon-box {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+}
+
+.notification-card.group .notification-icon-box {
+  background: rgba(168, 85, 247, 0.08);
+  color: var(--secondary);
+  border: 1px solid rgba(168, 85, 247, 0.12);
+}
+
+.notification-content {
+  flex: 1;
+}
+
+.notification-message {
+  font-family: var(--font-main);
+  font-size: 0.925rem;
+  color: var(--text-main);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.notification-message strong {
+  color: var(--text-pure);
+}
+
+.notification-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notification-time {
+  font-family: var(--font-main);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Header and controls styles */
+.notif-header-info h1 {
+  margin: 0;
+}
+
+.notif-header-info p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-top: 6px;
+}
+
+.notif-header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.badge-new {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-glow);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.notif-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.notif-delete-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--error);
+}
