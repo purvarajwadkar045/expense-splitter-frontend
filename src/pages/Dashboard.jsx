@@ -200,76 +200,80 @@ const Dashboard = () => {
         />
       </section>
 
-      {/* Quick Actions Panel */}
-      <section className="quick-actions-section">
-        <h3 className="section-title">Quick Services</h3>
-        <QuickActions 
-          onAddExpense={() => setIsExpenseOpen(true)}
-          onCreateGroup={() => setIsGroupOpen(true)}
-          onSettleUp={() => setIsSettleOpen(true)}
-          onViewHistory={() => navigate('/history')}
-        />
-      </section>
+      {/* Main Grid Section */}
+      <main className="dashboard-grid">
+        {/* Left Column: Spending Chart & Activities */}
+        <div className="dashboard-col-left">
+          {/* Spending Analysis Chart */}
+          <div className="chart-container glass-card">
+            <h3 className="section-title">Weekly Spendings Analysis</h3>
+            {expenses.length === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '240px', color: 'var(--text-dim)' }}>
+                No expenses recorded this week.
+              </div>
+            ) : (
+              <div className="chart-wrapper">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorSpend" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 11}} dy={10} />
+                    <YAxis hide />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(11, 15, 25, 0.95)', 
+                        borderRadius: 'var(--radius-md)', 
+                        border: '1px solid var(--glass-border)',
+                        boxShadow: 'var(--glass-shadow)',
+                        color: 'var(--text-pure)'
+                      }}
+                      formatter={(value) => [`₹${value.toLocaleString()}`, 'Spent']}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="spend" 
+                      stroke="var(--primary)" 
+                      strokeWidth={3}
+                      fillOpacity={1} 
+                      fill="url(#colorSpend)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
 
-      {/* Main Analysis Section */}
-      <main className="dashboard-main">
-        {/* Spending Analysis Chart */}
-        <div className="chart-container glass-card">
-          <h3 className="section-title">Weekly Spendings Analysis</h3>
-          {expenses.length === 0 ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '240px', color: 'var(--text-dim)' }}>
-              No expenses recorded this week.
-            </div>
-          ) : (
-            <div className="chart-wrapper">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorSpend" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 11}} dy={10} />
-                  <YAxis hide />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(11, 15, 25, 0.95)', 
-                      borderRadius: 'var(--radius-md)', 
-                      border: '1px solid var(--glass-border)',
-                      boxShadow: 'var(--glass-shadow)',
-                      color: 'var(--text-pure)'
-                    }}
-                    formatter={(value) => [`₹${value.toLocaleString()}`, 'Spent']}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="spend" 
-                    stroke="var(--primary)" 
-                    strokeWidth={3}
-                    fillOpacity={1} 
-                    fill="url(#colorSpend)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          {/* Recent Activity Feed */}
+          <div className="recent-activity-box glass-card">
+            <h3 className="section-title">Recent Activity Feed</h3>
+            <RecentActivity activities={activitiesList} />
+          </div>
         </div>
 
-        {/* Balance Summaries */}
-        <div className="summary-section-box glass-card">
-          <h3 className="section-title">Balances Summary</h3>
-          <BalanceSummary debts={debtsList} />
+        {/* Right Column: Quick Services & Balances */}
+        <div className="dashboard-col-right">
+          {/* Quick Actions Panel */}
+          <div className="quick-actions-box glass-card">
+            <h3 className="section-title">Quick Services</h3>
+            <QuickActions 
+              onAddExpense={() => setIsExpenseOpen(true)}
+              onCreateGroup={() => setIsGroupOpen(true)}
+              onSettleUp={() => setIsSettleOpen(true)}
+              onViewHistory={() => navigate('/history')}
+            />
+          </div>
+
+          {/* Balance Summaries */}
+          <div className="summary-section-box glass-card">
+            <h3 className="section-title">Balances Summary</h3>
+            <BalanceSummary debts={debtsList} />
+          </div>
         </div>
       </main>
-
-      {/* Secondary Feed Section */}
-      <section className="feed-section">
-        <div className="recent-activity-box glass-card">
-          <h3 className="section-title">Recent Activity Feed</h3>
-          <RecentActivity activities={activitiesList} />
-        </div>
-      </section>
 
       {/* QUICK ACTIONS MODALS */}
       

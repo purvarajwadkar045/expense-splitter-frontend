@@ -131,18 +131,13 @@ const GroupDetails = () => {
     <div className="page-container group-details-wrapper">
       {/* Back & Actions Header */}
       <div className="details-actions-bar">
-        <button onClick={() => navigate('/groups')} className="btn-secondary">
-          <MdArrowBack size={18} />
-          <span>Back to Groups</span>
-        </button>
+        <Button onClick={() => navigate('/groups')} variant="secondary" icon={MdArrowBack}>
+          Back to Groups
+        </Button>
 
         <div className="details-right-actions">
-          <button onClick={() => setIsSettingsOpen(true)} className="btn-secondary" title="Group Settings">
-            <MdSettings size={18} />
-          </button>
-          <button onClick={handleDeleteGroup} className="btn-secondary text-danger" title="Delete Group">
-            <MdDelete size={18} />
-          </button>
+          <Button onClick={() => setIsSettingsOpen(true)} variant="secondary" title="Group Settings" icon={MdSettings} />
+          <Button onClick={handleDeleteGroup} variant="secondary" className="text-danger" title="Delete Group" icon={MdDelete} />
         </div>
       </div>
 

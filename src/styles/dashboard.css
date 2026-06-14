@@ -119,6 +119,13 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .quick-actions-panel {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+
 .quick-action-btn {
   display: flex;
   flex-direction: column;
@@ -152,7 +159,7 @@
 }
 
 /* Dashboard Grid Layout */
-.dashboard-main {
+.dashboard-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 32px;
@@ -160,12 +167,18 @@
 }
 
 @media (min-width: 1024px) {
-  .dashboard-main {
+  .dashboard-grid {
     grid-template-columns: 1.6fr 1.4fr;
   }
 }
 
-.chart-container, .summary-section-box, .recent-activity-box {
+.dashboard-col-left, .dashboard-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.chart-container, .summary-section-box, .recent-activity-box, .quick-actions-box {
   padding: 28px;
 }
 
@@ -174,12 +187,6 @@
   height: 240px;
 }
 
-.feed-section {
-  margin-top: 32px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 32px;
-}
 
 /* Balance Summary Widgets */
 .balance-summary-container {

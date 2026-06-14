@@ -17,6 +17,7 @@ const Landing = () => {
         borderBottom: '1px solid var(--glass-border)',
         background: 'rgba(2, 6, 23, 0.4)',
         backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
         position: 'sticky',
         top: 0,
         zIndex: 100

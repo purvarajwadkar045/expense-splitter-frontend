@@ -123,6 +123,7 @@ const Navbar = ({ toggleSidebar, onSearch }) => {
                   width: '320px',
                   background: 'rgba(11, 15, 25, 0.95)',
                   backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
                   border: '1px solid var(--glass-border)',
                   borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--glass-shadow)',

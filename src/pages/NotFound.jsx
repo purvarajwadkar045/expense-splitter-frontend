@@ -27,14 +27,15 @@ const NotFound = () => {
             opacity: 1,
             y: 0,
           }}
-          transition={{
-            duration: 0.8,
-          }}
           style={{
             fontSize: '7rem',
             fontWeight: '800',
-            color: '#818cf8',
-            marginBottom: '20px',
+            background: 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            color: 'transparent',
+            marginBottom: '10px',
+            lineHeight: 1
           }}
         >
           404
@@ -55,15 +56,15 @@ const NotFound = () => {
           }}
           style={{
             color: 'var(--text-muted)',
-            fontSize: '1.3rem',
-            marginBottom: '40px',
+            fontSize: '1.2rem',
+            marginBottom: '32px',
           }}
         >
           Oops! The page you're looking for doesn't exist.
         </motion.p>
 
         <Link to="/dashboard" style={{ display: 'inline-block' }}>
-          <Button size="lg" variant="primary">
+          <Button size="md" variant="primary">
             Go to Dashboard
           </Button>
         </Link>

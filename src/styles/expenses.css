@@ -138,10 +138,17 @@
 /* Category grid display */
 .category-select-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-top: 8px;
 }
+
+@media (min-width: 480px) {
+  .category-select-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 
 .category-select-item {
   display: flex;

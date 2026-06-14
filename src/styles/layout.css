@@ -23,7 +23,14 @@
   justify-content: space-between;
   z-index: 90;
   overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform var(--transition-smooth);
 }
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
 
 .sidebar-menu {
   display: flex;
@@ -386,11 +393,7 @@
 /* Responsive sidebar configuration */
 @media (max-width: 1024px) {
   .sidebar {
-    transform: translateX(-100%);
-    transition: transform var(--transition-smooth);
     z-index: 95;
   }
-  .sidebar.open {
-    transform: translateX(0);
-  }
 }
+
