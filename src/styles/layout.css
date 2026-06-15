@@ -112,6 +112,13 @@
   z-index: 85;
 }
 
+@media (min-width: 1025px) {
+  .sidebar-overlay {
+    display: none !important;
+    pointer-events: none !important;
+  }
+}
+
 /* Navbar Style */
 .navbar {
   position: fixed;
