@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdMenu, MdNotifications, MdAccountCircle, MdLogout, MdSearch, MdDarkMode, MdLightMode } from 'react-icons/md';
 import { useAuth } from '../../hooks/useAuth';
-import { INITIAL_NOTIFICATIONS } from '../../utils/constants';
+import notificationService from '../../services/notificationService';
 
 const Navbar = ({ toggleSidebar, onSearch }) => {
   const { user, logout } = useAuth();
@@ -17,30 +17,20 @@ const Navbar = ({ toggleSidebar, onSearch }) => {
   // Notifications dynamically synced
   const [notifications, setNotifications] = useState([]);
 
-  const loadNotifications = () => {
-    const stored = localStorage.getItem('notifications');
-    if (!stored) {
-      localStorage.setItem('notifications', JSON.stringify(INITIAL_NOTIFICATIONS));
-      setNotifications(INITIAL_NOTIFICATIONS);
-    } else {
-      setNotifications(JSON.parse(stored));
+  const loadNotifications = async () => {
+    try {
+      const data = await notificationService.getNotifications();
+      setNotifications(data || []);
+    } catch (err) {
+      console.error('Failed to load notifications in Navbar:', err);
     }
   };
 
   useEffect(() => {
     loadNotifications();
-    const handleStorageChange = () => {
-      loadNotifications();
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('notifications-updated', loadNotifications);
+    return () => window.removeEventListener('notifications-updated', loadNotifications);
   }, []);
-
-  const saveNotifications = (updatedList) => {
-    localStorage.setItem('notifications', JSON.stringify(updatedList));
-    setNotifications(updatedList);
-    window.dispatchEvent(new Event('storage'));
-  };
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
@@ -66,9 +56,14 @@ const Navbar = ({ toggleSidebar, onSearch }) => {
     }
   };
 
-  const markAllRead = () => {
-    const updated = notifications.map(n => ({ ...n, unread: false }));
-    saveNotifications(updated);
+  const markAllRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      loadNotifications();
+      window.dispatchEvent(new Event('notifications-updated'));
+    } catch (err) {
+      console.error('Failed to mark all notifications as read:', err);
+    }
   };
 
   return (

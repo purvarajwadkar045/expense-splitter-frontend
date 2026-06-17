@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { MdArrowBack, MdAdd, MdPayment, MdSettings, MdDelete, MdInfoOutline, MdPeople } from 'react-icons/md';
+import { MdArrowBack, MdAdd, MdPayment, MdSettings, MdDelete, MdPeople, MdRefresh } from 'react-icons/md';
 
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import EmptyState from '../components/ui/EmptyState';
 import StatCard from '../components/ui/StatCard';
+import Loader from '../components/ui/Loader';
 
 // Subcomponents
 import ExpenseTable from '../components/expenses/ExpenseTable';
@@ -35,8 +35,12 @@ const GroupDetails = () => {
   const [settlements, setSettlements] = useState([]);
   const [debts, setDebts] = useState({ netBalances: {}, simplifiedPayments: [] });
 
-  // Tab state: 'expenses' | 'settlements' | 'members'
+  // Tab state: 'expenses' | 'settlements'
   const [activeTab, setActiveTab] = useState('expenses');
+
+  // Loading & Error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Modals state
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
@@ -45,84 +49,149 @@ const GroupDetails = () => {
   const [editingExpense, setEditingExpense] = useState(null);
 
   // Load all details
-  const loadGroupDetails = () => {
-    const g = groupService.getGroupById(id);
-    if (!g) {
-      toast.error('Group not found');
-      navigate('/groups');
-      return;
+  const loadGroupDetails = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const g = await groupService.getGroupById(id);
+      if (!g) {
+        toast.error('Group not found');
+        navigate('/groups');
+        return;
+      }
+      setGroup(g);
+
+      const [groupExpenses, groupSettlements] = await Promise.all([
+        expenseService.getExpensesByGroupId(id),
+        settlementService.getSettlementsByGroupId(id)
+      ]);
+
+      setExpenses(groupExpenses || []);
+      setSettlements(groupSettlements || []);
+
+      const calculatedDebts = calculateSimplifiedDebts(g.members || [], groupExpenses, groupSettlements);
+      setDebts(calculatedDebts);
+    } catch (err) {
+      console.error('Failed to load group details:', err);
+      setError('Unable to load group information. Please try again.');
+      toast.error('Failed to load group details.');
+    } finally {
+      setLoading(false);
     }
-    setGroup(g);
-
-    const groupExpenses = expenseService.getExpensesByGroupId(id);
-    const groupSettlements = settlementService.getSettlementsByGroupId(id);
-
-    setExpenses(groupExpenses);
-    setSettlements(groupSettlements);
-
-    const calculatedDebts = calculateSimplifiedDebts(g.members, groupExpenses, groupSettlements);
-    setDebts(calculatedDebts);
   };
 
   useEffect(() => {
     loadGroupDetails();
   }, [id]);
 
-  if (!group) return null;
+  const openEditModal = (expense) => {
+    setEditingExpense(expense);
+    setIsExpenseOpen(true);
+  };
 
   // Actions
-  const handleEditGroupSettings = (groupData) => {
-    groupService.updateGroup(id, groupData);
-    toast.success('Group settings updated');
-    setIsSettingsOpen(false);
-    loadGroupDetails();
+  const handleEditGroupSettings = async (groupData) => {
+    try {
+      await groupService.updateGroup(id, groupData);
+      toast.success('Group settings updated');
+      setIsSettingsOpen(false);
+      await loadGroupDetails();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to update group settings');
+    }
   };
 
-  const handleDeleteGroup = () => {
+  const handleDeleteGroup = async () => {
     if (window.confirm('Are you sure you want to delete this group? All expenses and settlements log will be purged.')) {
-      groupService.deleteGroup(id);
-      
-      // Purge matching expenses/settlements
-      const allExpenses = expenseService.getExpenses();
-      const allSettlements = settlementService.getSettlements();
-      localStorage.setItem('expenses', JSON.stringify(allExpenses.filter(e => e.groupId !== id)));
-      localStorage.setItem('settlements', JSON.stringify(allSettlements.filter(s => s.groupId !== id)));
-      
-      toast.success('Group deleted successfully');
-      navigate('/groups');
+      try {
+        await groupService.deleteGroup(id);
+        toast.success('Group deleted successfully');
+        navigate('/groups');
+      } catch (err) {
+        console.error(err);
+        toast.error(err.response?.data?.detail || 'Failed to delete group');
+      }
     }
   };
 
-  const handleAddExpense = (expenseData) => {
-    if (editingExpense) {
-      expenseService.updateExpense(editingExpense.id, expenseData);
-      toast.success('Expense updated');
-    } else {
-      expenseService.createExpense(expenseData);
-      toast.success('Expense added');
+  const handleAddExpense = async (expenseData) => {
+    try {
+      if (editingExpense) {
+        await expenseService.updateExpense(editingExpense.id, expenseData);
+        toast.success('Expense updated');
+      } else {
+        await expenseService.createExpense(expenseData);
+        toast.success('Expense added');
+      }
+      setIsExpenseOpen(false);
+      setEditingExpense(null);
+      await loadGroupDetails();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to save expense');
     }
-    setIsExpenseOpen(false);
-    setEditingExpense(null);
-    loadGroupDetails();
   };
 
-  const handleDeleteExpense = (expId) => {
+  const handleDeleteExpense = async (expId) => {
     if (window.confirm('Delete this expense entry?')) {
-      expenseService.deleteExpense(expId);
-      toast.success('Expense deleted');
-      loadGroupDetails();
+      try {
+        await expenseService.deleteExpense(expId);
+        toast.success('Expense deleted');
+        await loadGroupDetails();
+      } catch (err) {
+        console.error(err);
+        toast.error(err.response?.data?.detail || 'Failed to delete expense');
+      }
     }
   };
 
-  const handleRecordSettlement = (settleData) => {
-    settlementService.createSettlement({
-      groupId: id,
-      ...settleData
-    });
-    toast.success('Repayment settled!');
-    setIsSettleOpen(false);
-    loadGroupDetails();
+  const handleRecordSettlement = async (settleData) => {
+    try {
+      await settlementService.createSettlement({
+        groupId: id,
+        ...settleData
+      });
+      toast.success('Repayment settled!');
+      setIsSettleOpen(false);
+      await loadGroupDetails();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to record settlement');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="page-container group-details-wrapper">
+        <div className="details-actions-bar">
+          <Button onClick={() => navigate('/groups')} variant="secondary" icon={MdArrowBack}>
+            Back to Groups
+          </Button>
+        </div>
+        <Loader type="skeleton" />
+      </div>
+    );
+  }
+
+  if (error || !group) {
+    return (
+      <div className="page-container group-details-wrapper">
+        <div className="details-actions-bar">
+          <Button onClick={() => navigate('/groups')} variant="secondary" icon={MdArrowBack}>
+            Back to Groups
+          </Button>
+        </div>
+        <div className="empty-state-container glass-card" style={{ padding: '40px', textAlign: 'center' }}>
+          <h3 style={{ color: 'var(--text-pure)' }}>Failed to load Group Details</h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>{error || 'Group not found'}</p>
+          <Button onClick={loadGroupDetails} variant="primary" icon={MdRefresh}>
+            Retry Load
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const myBalance = debts.netBalances['You'] || 0;
   const totalSpent = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -247,7 +316,7 @@ const GroupDetails = () => {
           <div className="glass-card details-card-padding">
             <h3 className="sidebar-section-title">Balances Standing</h3>
             <div className="standings-list">
-              {group.members.map((member) => {
+              {(group.members || []).map((member) => {
                 const bal = debts.netBalances[member] || 0;
                 return (
                   <div key={member} className="standing-row-item">

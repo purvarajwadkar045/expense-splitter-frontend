@@ -8,6 +8,7 @@ import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
 import useToast from '../hooks/useToast';
+import authService from '../services/authService';
 
 import '../styles/dashboard.css';
 import '../styles/components.css';
@@ -65,9 +66,14 @@ const Profile = () => {
   };
 
   const onPasswordSubmit = async (data) => {
-    // Simulated change password
-    toast.success('Password changed successfully!');
-    resetPasswordForm();
+    try {
+      await authService.changePassword(data.currentPassword, data.newPassword);
+      toast.success('Password changed successfully!');
+      resetPasswordForm();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to change password. Please check your credentials.');
+    }
   };
 
   // Convert ISO date to readable string

@@ -1,78 +1,30 @@
-import { INITIAL_EXPENSES } from '../utils/constants';
-import groupService from './groupService';
-
-const getStoredExpenses = () => {
-  const stored = localStorage.getItem('expenses');
-  if (!stored) {
-    localStorage.setItem('expenses', JSON.stringify(INITIAL_EXPENSES));
-    return INITIAL_EXPENSES;
-  }
-  return JSON.parse(stored);
-};
-
-const saveExpenses = (expenses) => {
-  localStorage.setItem('expenses', JSON.stringify(expenses));
-  
-  // Recalculate group totals whenever expenses change
-  const groups = groupService.getGroups();
-  const updatedGroups = groups.map(g => {
-    const groupExpenses = expenses.filter(e => e.groupId === g.id);
-    const total = groupExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    return { ...g, totalExpenses: total };
-  });
-  localStorage.setItem('groups', JSON.stringify(updatedGroups));
-};
+import API from './api';
 
 const expenseService = {
-  getExpenses: () => {
-    return getStoredExpenses();
+  getExpenses: async (groupId = '') => {
+    const params = groupId ? { groupId } : {};
+    const response = await API.get('/expenses', { params });
+    return response.data; // expects array of Expense
   },
 
-  getExpensesByGroupId: (groupId) => {
-    const expenses = getStoredExpenses();
-    return expenses.filter(e => e.groupId === groupId);
+  getExpensesByGroupId: async (groupId) => {
+    const response = await API.get(`/groups/${groupId}/expenses`);
+    return response.data; // expects array of Expense in the group
   },
 
-  createExpense: (expenseData) => {
-    // expenseData expects { groupId, title, amount, paidBy, category, notes, splitType, shares }
-    const expenses = getStoredExpenses();
-    const newExpense = {
-      id: `e_${Date.now()}`,
-      ...expenseData,
-      amount: Number(expenseData.amount),
-      date: expenseData.date || new Date().toISOString().split('T')[0]
-    };
-    
-    const updated = [newExpense, ...expenses];
-    saveExpenses(updated);
-    return newExpense;
+  createExpense: async (expenseData) => {
+    const response = await API.post('/expenses', expenseData);
+    return response.data; // expects new Expense object
   },
 
-  updateExpense: (id, expenseData) => {
-    const expenses = getStoredExpenses();
-    let updatedExpense = null;
-
-    const updated = expenses.map(e => {
-      if (e.id === id) {
-        updatedExpense = { 
-          ...e, 
-          ...expenseData, 
-          amount: Number(expenseData.amount)
-        };
-        return updatedExpense;
-      }
-      return e;
-    });
-
-    saveExpenses(updated);
-    return updatedExpense;
+  updateExpense: async (id, expenseData) => {
+    const response = await API.put(`/expenses/${id}`, expenseData);
+    return response.data; // expects updated Expense object
   },
 
-  deleteExpense: (id) => {
-    const expenses = getStoredExpenses();
-    const filtered = expenses.filter(e => e.id !== id);
-    saveExpenses(filtered);
-    return true;
+  deleteExpense: async (id) => {
+    const response = await API.delete(`/expenses/${id}`);
+    return response.data;
   }
 };
 

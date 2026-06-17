@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { MdNotifications, MdCheck, MdDelete, MdReceipt, MdPayment, MdGroupAdd } from 'react-icons/md';
+import { MdNotifications, MdCheck, MdDelete, MdReceipt, MdPayment, MdGroupAdd, MdRefresh } from 'react-icons/md';
 
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
-
-import { INITIAL_NOTIFICATIONS } from '../utils/constants';
+import Loader from '../components/ui/Loader';
+import notificationService from '../services/notificationService';
 import useToast from '../hooks/useToast';
 
 import '../styles/notifications.css';
@@ -12,61 +12,90 @@ import '../styles/notifications.css';
 const Notifications = () => {
   const toast = useToast();
   const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Load from localStorage
-  const loadNotifications = () => {
-    const stored = localStorage.getItem('notifications');
-    if (!stored) {
-      localStorage.setItem('notifications', JSON.stringify(INITIAL_NOTIFICATIONS));
-      setNotifications(INITIAL_NOTIFICATIONS);
-    } else {
-      setNotifications(JSON.parse(stored));
+  // Load from API
+  const loadNotifications = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await notificationService.getNotifications();
+      setNotifications(data || []);
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+      setError('Could not retrieve notifications. Please check your network connection.');
+      toast.error('Failed to fetch notifications.');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     loadNotifications();
     
-    // Add event listener to sync notifications changes from Navbar or other pages
-    const handleStorageChange = () => {
+    // Add event listener to sync notifications changes from Navbar
+    const handleSync = () => {
       loadNotifications();
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('notifications-updated', handleSync);
+    return () => window.removeEventListener('notifications-updated', handleSync);
   }, []);
 
-  const saveNotifications = (updatedList) => {
-    localStorage.setItem('notifications', JSON.stringify(updatedList));
-    setNotifications(updatedList);
-    // Dispatch custom event to notify Navbar dropdown to re-sync
-    window.dispatchEvent(new Event('storage'));
+  const triggerGlobalSync = () => {
+    window.dispatchEvent(new Event('notifications-updated'));
   };
 
-  const markAllAsRead = () => {
-    const updated = notifications.map((n) => ({ ...n, unread: false }));
-    saveNotifications(updated);
-    toast.success('All notifications marked as read.');
-  };
-
-  const clearAllNotifications = () => {
-    if (window.confirm('Are you sure you want to clear all notifications?')) {
-      saveNotifications([]);
-      toast.success('Notifications cleared.');
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      toast.success('All notifications marked as read.');
+      loadNotifications();
+      triggerGlobalSync();
+    } catch (err) {
+      toast.error('Failed to mark all as read.');
     }
   };
 
-  const markAsRead = (id) => {
-    const updated = notifications.map((n) => 
-      n.id === id ? { ...n, unread: false } : n
-    );
-    saveNotifications(updated);
+  const clearAllNotifications = async () => {
+    if (window.confirm('Are you sure you want to clear all notifications?')) {
+      try {
+        // Sequentially or via parallel calls delete all notifications
+        // Note: Real API might have a delete-all route.
+        // For contract readiness, we can loop over deleting them, or call bulk DELETE if available.
+        // Let's call delete on each one or call clear endpoint
+        for (const notif of notifications) {
+          await notificationService.deleteNotification(notif.id);
+        }
+        toast.success('Notifications cleared.');
+        loadNotifications();
+        triggerGlobalSync();
+      } catch (err) {
+        toast.error('Failed to clear notifications.');
+      }
+    }
   };
 
-  const deleteNotification = (id, e) => {
+  const markAsRead = async (id) => {
+    try {
+      await notificationService.markAsRead(id);
+      loadNotifications();
+      triggerGlobalSync();
+    } catch (err) {
+      console.error('Failed to mark notification as read:', err);
+    }
+  };
+
+  const deleteNotification = async (id, e) => {
     e.stopPropagation();
-    const updated = notifications.filter((n) => n.id !== id);
-    saveNotifications(updated);
-    toast.success('Notification removed.');
+    try {
+      await notificationService.deleteNotification(id);
+      toast.success('Notification removed.');
+      loadNotifications();
+      triggerGlobalSync();
+    } catch (err) {
+      toast.error('Failed to remove notification.');
+    }
   };
 
   const getIcon = (type) => {
@@ -82,6 +111,28 @@ const Notifications = () => {
   };
 
   const unreadCount = notifications.filter((n) => n.unread).length;
+
+  if (loading) {
+    return (
+      <div className="page-container notifications-wrapper">
+        <Loader type="skeleton" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container notifications-wrapper">
+        <div className="empty-state-container glass-card" style={{ padding: '40px', textAlign: 'center' }}>
+          <h3 style={{ color: 'var(--text-pure)' }}>Something went wrong</h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>{error}</p>
+          <Button onClick={loadNotifications} variant="primary" icon={MdRefresh}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container notifications-wrapper">
@@ -118,7 +169,7 @@ const Notifications = () => {
           {notifications.map((notif) => (
             <div 
               key={notif.id} 
-              onClick={() => markAsRead(notif.id)}
+              onClick={() => notif.unread && markAsRead(notif.id)}
               className={`notification-card ${notif.unread ? 'unread' : ''} ${notif.type}`}
               style={{ cursor: notif.unread ? 'pointer' : 'default' }}
             >

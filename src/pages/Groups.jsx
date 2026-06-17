@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { MdGroupAdd, MdGroup } from 'react-icons/md';
+import { MdGroupAdd, MdRefresh } from 'react-icons/md';
 
 import GroupCard from '../components/groups/GroupCard';
 import GroupForm from '../components/groups/GroupForm';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
+import Loader from '../components/ui/Loader';
 
 import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
@@ -26,35 +26,51 @@ const Groups = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
 
+  // loading & error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   // Load all groups and dynamic balances
-  const loadGroupsData = () => {
-    const fetchedGroups = groupService.getGroups();
-    const allExpenses = expenseService.getExpenses();
-    const allSettlements = settlementService.getSettlements();
+  const loadGroupsData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [fetchedGroups, allExpenses, allSettlements] = await Promise.all([
+        groupService.getGroups(),
+        expenseService.getExpenses(),
+        settlementService.getSettlements()
+      ]);
 
-    const groupsWithBalances = fetchedGroups.map((g) => {
-      const groupExpenses = allExpenses.filter((e) => e.groupId === g.id);
-      const groupSettlements = allSettlements.filter((s) => s.groupId === g.id);
-      
-      const { netBalances } = calculateSimplifiedDebts(
-        g.members,
-        groupExpenses,
-        groupSettlements
-      );
+      const groupsWithBalances = (fetchedGroups || []).map((g) => {
+        const groupExpenses = allExpenses.filter((e) => e.groupId === g.id);
+        const groupSettlements = allSettlements.filter((s) => s.groupId === g.id);
+        
+        const { netBalances } = calculateSimplifiedDebts(
+          g.members || [],
+          groupExpenses,
+          groupSettlements
+        );
 
-      const userBalance = netBalances['You'] || 0;
-      
-      // Calculate total expenses for this group
-      const totalSpent = groupExpenses.reduce((sum, e) => sum + e.amount, 0);
+        const userBalance = netBalances['You'] || 0;
+        
+        // Calculate total expenses for this group
+        const totalSpent = groupExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-      return {
-        ...g,
-        userBalance,
-        totalExpenses: totalSpent
-      };
-    });
+        return {
+          ...g,
+          userBalance,
+          totalExpenses: totalSpent
+        };
+      });
 
-    setGroups(groupsWithBalances);
+      setGroups(groupsWithBalances);
+    } catch (err) {
+      console.error('Failed to load groups data:', err);
+      setError('Unable to load your sharing groups. Please verify your connection and try again.');
+      toast.error('Failed to fetch groups.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -71,35 +87,70 @@ const Groups = () => {
     setIsModalOpen(true);
   };
 
-  const handleFormSubmit = (data) => {
-    if (editingGroup) {
-      groupService.updateGroup(editingGroup.id, data);
-      toast.success('Group updated successfully');
-    } else {
-      groupService.createGroup(data.name, data.description, data.members);
-      toast.success('Group created successfully');
+  const handleFormSubmit = async (data) => {
+    try {
+      if (editingGroup) {
+        await groupService.updateGroup(editingGroup.id, data);
+        toast.success('Group updated successfully');
+      } else {
+        await groupService.createGroup(data.name, data.description, data.members);
+        toast.success('Group created successfully');
+      }
+      setIsModalOpen(false);
+      await loadGroupsData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to submit group form');
     }
-    setIsModalOpen(false);
-    loadGroupsData();
   };
 
-  const handleDeleteGroup = (id) => {
+  const handleDeleteGroup = async (id) => {
     if (window.confirm('Are you sure you want to delete this group? All associated expenses will be lost.')) {
-      groupService.deleteGroup(id);
-      // Clean up group expenses and settlements
-      const allExpenses = expenseService.getExpenses();
-      const allSettlements = settlementService.getSettlements();
-      
-      const filteredExpenses = allExpenses.filter(e => e.groupId !== id);
-      const filteredSettlements = allSettlements.filter(s => s.groupId !== id);
-      
-      localStorage.setItem('expenses', JSON.stringify(filteredExpenses));
-      localStorage.setItem('settlements', JSON.stringify(filteredSettlements));
-
-      toast.success('Group deleted successfully');
-      loadGroupsData();
+      try {
+        await groupService.deleteGroup(id);
+        
+        // Note: For backend integrity, the database cascade delete or backend logic will purge expenses.
+        // We do not modify localStorage now since everything goes to the backend.
+        
+        toast.success('Group deleted successfully');
+        await loadGroupsData();
+      } catch (err) {
+        console.error(err);
+        toast.error(err.response?.data?.detail || 'Failed to delete group');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="page-container groups-page-wrapper">
+        <header className="dashboard-header flex-header">
+          <div className="header-info">
+            <h1 className="header-title">Groups</h1>
+            <p className="header-subtitle">Retrieving shared accounts...</p>
+          </div>
+        </header>
+        <Loader type="skeleton" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container groups-page-wrapper">
+        <header className="dashboard-header">
+          <h1 className="header-title">Groups</h1>
+        </header>
+        <div className="empty-state-container glass-card" style={{ padding: '40px', textAlign: 'center' }}>
+          <h3 style={{ color: 'var(--text-pure)' }}>Failed to load Groups</h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>{error}</p>
+          <Button onClick={loadGroupsData} variant="primary" icon={MdRefresh}>
+            Retry Load
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container groups-page-wrapper">

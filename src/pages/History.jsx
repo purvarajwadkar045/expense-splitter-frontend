@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { MdSearch, MdCloudDownload, MdReceipt, MdPayment, MdFilterList, MdDateRange, MdFileDownload } from 'react-icons/md';
+import { MdSearch, MdReceipt, MdPayment, MdDateRange, MdFileDownload, MdRefresh } from 'react-icons/md';
 
 import EmptyState from '../components/ui/EmptyState';
 import Button from '../components/ui/Button';
+import Loader from '../components/ui/Loader';
 
 import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
@@ -26,50 +27,66 @@ const History = () => {
   const [selectedType, setSelectedType] = useState('all'); // 'all' | 'expense' | 'settlement'
   const [sortOrder, setSortOrder] = useState('newest'); // 'newest' | 'oldest'
 
+  // Loading & Error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   // Load data
-  const loadHistoryData = () => {
-    const fetchedGroups = groupService.getGroups();
-    const fetchedExpenses = expenseService.getExpenses();
-    const fetchedSettlements = settlementService.getSettlements();
+  const loadHistoryData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [fetchedGroups, fetchedExpenses, fetchedSettlements] = await Promise.all([
+        groupService.getGroups(),
+        expenseService.getExpenses(),
+        settlementService.getSettlements()
+      ]);
 
-    setGroups(fetchedGroups);
+      setGroups(fetchedGroups || []);
 
-    // Merge expenses and settlements
-    const historyList = [];
+      // Merge expenses and settlements
+      const historyList = [];
 
-    fetchedExpenses.forEach((e) => {
-      const g = fetchedGroups.find((grp) => grp.id === e.groupId);
-      historyList.push({
-        id: `e-${e.id}`,
-        type: 'expense',
-        title: e.title,
-        amount: e.amount,
-        paidBy: e.paidBy,
-        date: e.date,
-        category: e.category,
-        groupName: g ? g.name : 'Unknown Group',
-        groupId: e.groupId,
-        details: e.notes || 'No description'
+      (fetchedExpenses || []).forEach((e) => {
+        const g = (fetchedGroups || []).find((grp) => grp.id === e.groupId);
+        historyList.push({
+          id: `e-${e.id}`,
+          type: 'expense',
+          title: e.title,
+          amount: e.amount,
+          paidBy: e.paidBy,
+          date: e.date,
+          category: e.category,
+          groupName: g ? g.name : 'Unknown Group',
+          groupId: e.groupId,
+          details: e.notes || 'No description'
+        });
       });
-    });
 
-    fetchedSettlements.forEach((s) => {
-      const g = fetchedGroups.find((grp) => grp.id === s.groupId);
-      historyList.push({
-        id: `s-${s.id}`,
-        type: 'settlement',
-        title: `${s.from} settled with ${s.to}`,
-        amount: s.amount,
-        paidBy: s.from,
-        date: s.date,
-        category: 'Settlement',
-        groupName: g ? g.name : 'Unknown Group',
-        groupId: s.groupId,
-        details: `Payment method: ${s.method}`
+      (fetchedSettlements || []).forEach((s) => {
+        const g = (fetchedGroups || []).find((grp) => grp.id === s.groupId);
+        historyList.push({
+          id: `s-${s.id}`,
+          type: 'settlement',
+          title: `${s.from} settled with ${s.to}`,
+          amount: s.amount,
+          paidBy: s.from,
+          date: s.date,
+          category: 'Settlement',
+          groupName: g ? g.name : 'Unknown Group',
+          groupId: s.groupId,
+          details: `Payment method: ${s.method}`
+        });
       });
-    });
 
-    setUnifiedHistory(historyList);
+      setUnifiedHistory(historyList);
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      setError('Unable to load history ledger. Please check your network and try again.');
+      toast.error('Failed to load history.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -119,6 +136,37 @@ const History = () => {
     const cat = CATEGORIES.find(c => c.id === catId);
     return cat ? cat.color : '#10b981';
   };
+
+  if (loading) {
+    return (
+      <div className="page-container history-page-wrapper">
+        <header className="dashboard-header flex-header">
+          <div className="header-info">
+            <h1 className="header-title">Repayment & Split History</h1>
+            <p className="header-subtitle">Reconstructing unified ledger...</p>
+          </div>
+        </header>
+        <Loader type="skeleton" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container history-page-wrapper">
+        <header className="dashboard-header">
+          <h1 className="header-title">Repayment & Split History</h1>
+        </header>
+        <div className="empty-state-container glass-card" style={{ padding: '40px', textAlign: 'center' }}>
+          <h3 style={{ color: 'var(--text-pure)' }}>Failed to load History</h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>{error}</p>
+          <Button onClick={loadHistoryData} variant="primary" icon={MdRefresh}>
+            Retry Load
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container history-page-wrapper">

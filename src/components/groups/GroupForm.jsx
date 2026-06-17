@@ -1,16 +1,37 @@
 import React, { useState } from 'react';
-import { MdClose, MdAdd } from 'react-icons/md';
+import { useForm } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
+import { MdClose } from 'react-icons/md';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import showToast from '../ui/Toast';
 
+const schema = yup.object().shape({
+  name: yup
+    .string()
+    .required('Group name is required')
+    .min(3, 'Group name must be at least 3 characters'),
+  description: yup.string().optional(),
+});
+
 const GroupForm = ({ onSubmit, initialData = null }) => {
-  const [name, setName] = useState(initialData?.name || '');
-  const [description, setDescription] = useState(initialData?.description || '');
   const [members, setMembers] = useState(
     initialData?.members?.filter(m => m !== 'You') || []
   );
   const [newMember, setNewMember] = useState('');
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      name: initialData?.name || '',
+      description: initialData?.description || '',
+    },
+  });
 
   const handleAddMember = (e) => {
     e.preventDefault();
@@ -36,28 +57,22 @@ const GroupForm = ({ onSubmit, initialData = null }) => {
     setMembers(members.filter(m => m !== nameToRemove));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      showToast.error('Group name is required');
-      return;
-    }
-
+  const handleFormSubmit = (data) => {
     onSubmit({
-      name: name.trim(),
-      description: description.trim(),
-      members: members // 'You' is added in service level
+      name: data.name.trim(),
+      description: data.description?.trim() || '',
+      members: members
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="auth-form">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="auth-form">
       <Input
         label="Group Name"
         name="name"
         placeholder="e.g. Goa Vacation, Room 204"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        register={register}
+        errors={errors}
         required
       />
 
@@ -65,8 +80,8 @@ const GroupForm = ({ onSubmit, initialData = null }) => {
         label="Description (Optional)"
         name="description"
         placeholder="e.g. Rent, food, and petrol logs..."
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
+        register={register}
+        errors={errors}
       />
 
       <div className="form-group mb-4">
@@ -104,7 +119,7 @@ const GroupForm = ({ onSubmit, initialData = null }) => {
           />
         </div>
         <span className="form-help-text">
-          Press Enter or click Add to add names.
+          Press Enter to add names to the group list.
         </span>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MdPayment, MdReceipt } from 'react-icons/md';
+import { MdPayment, MdReceipt, MdRefresh } from 'react-icons/md';
 
 import SettlementHistory from '../components/settlements/SettlementHistory';
 import SettlementForm from '../components/settlements/SettlementForm';
@@ -7,6 +7,7 @@ import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import StatCard from '../components/ui/StatCard';
+import Loader from '../components/ui/Loader';
 
 import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
@@ -28,75 +29,127 @@ const Settlements = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [stats, setStats] = useState({ totalSettled: 0, count: 0 });
 
+  // Loading & Error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   // Load details
-  const loadSettlementsData = () => {
-    const fetchedGroups = groupService.getGroups();
-    const fetchedSettlements = settlementService.getSettlements();
-    const fetchedExpenses = expenseService.getExpenses();
+  const loadSettlementsData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [fetchedGroups, fetchedSettlements, fetchedExpenses] = await Promise.all([
+        groupService.getGroups(),
+        settlementService.getSettlements(),
+        expenseService.getExpenses()
+      ]);
 
-    setGroups(fetchedGroups);
-    setSettlements(fetchedSettlements);
+      setGroups(fetchedGroups || []);
+      setSettlements(fetchedSettlements || []);
 
-    // Sum settled payments
-    const totalVal = fetchedSettlements.reduce((sum, s) => sum + s.amount, 0);
-    setStats({
-      totalSettled: totalVal,
-      count: fetchedSettlements.length
-    });
+      // Sum settled payments
+      const totalVal = fetchedSettlements.reduce((sum, s) => sum + s.amount, 0);
+      setStats({
+        totalSettled: totalVal,
+        count: fetchedSettlements.length
+      });
 
-    // Extract all group members
-    const members = [...new Set(fetchedGroups.flatMap((g) => g.members || []))];
-    setAllMembers(members);
+      // Extract all group members
+      const members = [...new Set(fetchedGroups.flatMap((g) => g.members || []))];
+      setAllMembers(members);
 
-    // Accumulate simplified debts across all groups to form global quick settlements suggestions
-    const suggestions = [];
-    fetchedGroups.forEach((g) => {
-      const groupExpenses = fetchedExpenses.filter((e) => e.groupId === g.id);
-      const groupSettlements = fetchedSettlements.filter((s) => s.groupId === g.id);
-      
-      const { simplifiedPayments } = calculateSimplifiedDebts(
-        g.members,
-        groupExpenses,
-        groupSettlements
-      );
+      // Accumulate simplified debts across all groups to form global quick settlements suggestions
+      const suggestions = [];
+      fetchedGroups.forEach((g) => {
+        const groupExpenses = fetchedExpenses.filter((e) => e.groupId === g.id);
+        const groupSettlements = fetchedSettlements.filter((s) => s.groupId === g.id);
+        
+        const { simplifiedPayments } = calculateSimplifiedDebts(
+          g.members || [],
+          groupExpenses,
+          groupSettlements
+        );
 
-      // Map group ID onto suggestions
-      simplifiedPayments.forEach((payment) => {
-        suggestions.push({
-          ...payment,
-          groupId: g.id
+        // Map group ID onto suggestions
+        simplifiedPayments.forEach((payment) => {
+          suggestions.push({
+            ...payment,
+            groupId: g.id
+          });
         });
       });
-    });
 
-    setGlobalSuggestions(suggestions);
+      setGlobalSuggestions(suggestions);
+    } catch (err) {
+      console.error('Failed to load settlements:', err);
+      setError('Unable to load settlements history. Please try again.');
+      toast.error('Failed to load settlements.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadSettlementsData();
   }, []);
 
-  const handleRecordSettlement = (settleData) => {
-    // If suggested payment has a groupId, use it. Otherwise, look up a group they share or default to the first group
-    let groupId = settleData.groupId;
-    
-    if (!groupId) {
-      // Find a group both parties share
-      const sharedGroup = groups.find((g) => 
-        g.members.includes(settleData.from) && g.members.includes(settleData.to)
-      );
-      groupId = sharedGroup ? sharedGroup.id : (groups[0] ? groups[0].id : 'g1');
+  const handleRecordSettlement = async (settleData) => {
+    try {
+      // If suggested payment has a groupId, use it. Otherwise, look up a group they share or default to the first group
+      let groupId = settleData.groupId;
+      
+      if (!groupId) {
+        // Find a group both parties share
+        const sharedGroup = groups.find((g) => 
+          g.members.includes(settleData.from) && g.members.includes(settleData.to)
+        );
+        groupId = sharedGroup ? sharedGroup.id : (groups[0]?.id || 'g1');
+      }
+
+      await settlementService.createSettlement({
+        groupId,
+        ...settleData
+      });
+
+      toast.success('Repayment settlement successfully recorded!');
+      setIsModalOpen(false);
+      await loadSettlementsData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to record settlement');
     }
-
-    settlementService.createSettlement({
-      groupId,
-      ...settleData
-    });
-
-    toast.success('Repayment settlement successfully recorded!');
-    setIsModalOpen(false);
-    loadSettlementsData();
   };
+
+  if (loading) {
+    return (
+      <div className="page-container settlements-page-wrapper">
+        <header className="dashboard-header flex-header">
+          <div className="header-info">
+            <h1 className="header-title">Settlements</h1>
+            <p className="header-subtitle">Loading repayment logs...</p>
+          </div>
+        </header>
+        <Loader type="skeleton" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container settlements-page-wrapper">
+        <header className="dashboard-header">
+          <h1 className="header-title">Settlements</h1>
+        </header>
+        <div className="empty-state-container glass-card" style={{ padding: '40px', textAlign: 'center' }}>
+          <h3 style={{ color: 'var(--text-pure)' }}>Failed to load Settlements</h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>{error}</p>
+          <Button onClick={loadSettlementsData} variant="primary" icon={MdRefresh}>
+            Retry Load
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container settlements-page-wrapper">

@@ -1,128 +1,119 @@
 import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
 import { CATEGORIES } from '../../utils/constants';
 import SplitSelector from './SplitSelector';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import useToast from '../../hooks/useToast';
 
+const schema = yup.object().shape({
+  groupId: yup.string().required('Please select a group'),
+  title: yup.string().required('Expense title is required').min(2, 'Title is too short'),
+  amount: yup
+    .number()
+    .transform((value, originalValue) => originalValue === '' ? undefined : value)
+    .required('Amount is required')
+    .positive('Amount must be greater than 0')
+    .typeError('Please enter a valid amount'),
+  paidBy: yup.string().required('Please select who paid'),
+  category: yup.string().required('Please select a category'),
+  date: yup.string().required('Date is required'),
+  notes: yup.string().optional(),
+  splitType: yup.string().oneOf(['equal', 'custom']).required(),
+});
+
 const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onSave, onCancel }) => {
   const toast = useToast();
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [groupId, setGroupId] = useState('');
-  
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidBy, setPaidBy] = useState('You');
-  const [category, setCategory] = useState('Others');
-  const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  const [splitType, setSplitType] = useState('equal');
   const [shares, setShares] = useState({});
 
-  // Initialize form if editing initialData
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      groupId: initialData?.groupId || defaultGroupId || (groups[0]?.id || ''),
+      title: initialData?.title || '',
+      amount: initialData?.amount || '',
+      paidBy: initialData?.paidBy || 'You',
+      category: initialData?.category || 'Others',
+      notes: initialData?.notes || '',
+      date: initialData?.date || new Date().toISOString().split('T')[0],
+      splitType: initialData?.splitType || 'equal',
+    },
+  });
+
+  const watchGroupId = watch('groupId');
+  const watchAmount = watch('amount');
+  const watchSplitType = watch('splitType');
+  const watchCategory = watch('category');
+  const watchPaidBy = watch('paidBy');
+
+  const selectedGroup = groups.find((g) => g.id === watchGroupId);
+  const members = selectedGroup ? selectedGroup.members : ['You'];
+
+  // Initialize shares if editing
   useEffect(() => {
     if (initialData) {
-      setTitle(initialData.title || '');
-      setAmount(initialData.amount || '');
-      setGroupId(initialData.groupId || '');
-      setPaidBy(initialData.paidBy || 'You');
-      setCategory(initialData.category || 'Others');
-      setNotes(initialData.notes || '');
-      setDate(initialData.date || new Date().toISOString().split('T')[0]);
-      setSplitType(initialData.splitType || 'equal');
       setShares(initialData.shares || {});
-    } else if (defaultGroupId) {
-      setGroupId(defaultGroupId);
-    } else if (groups.length > 0) {
-      setGroupId(groups[0].id);
     }
-  }, [initialData, defaultGroupId, groups]);
+  }, [initialData]);
 
-  // Update selected group details whenever groupId changes
+  // Adjust default paidBy when group changes
   useEffect(() => {
-    const group = groups.find(g => g.id === groupId);
-    setSelectedGroup(group || null);
-    if (group && !initialData) {
-      // Default paidBy to 'You' or first member if 'You' is not in group (unlikely)
-      const members = group.members || [];
-      if (members.includes('You')) {
-        setPaidBy('You');
-      } else if (members.length > 0) {
-        setPaidBy(members[0]);
+    if (selectedGroup && !initialData) {
+      const m = selectedGroup.members || [];
+      if (m.includes('You')) {
+        setValue('paidBy', 'You');
+      } else if (m.length > 0) {
+        setValue('paidBy', m[0]);
       }
     }
-  }, [groupId, groups, initialData]);
-
-  const handleGroupChange = (e) => {
-    setGroupId(e.target.value);
-    setShares({}); // Reset shares when group changes
-  };
-
-  const handleAmountChange = (e) => {
-    setAmount(e.target.value);
-  };
+    // Only reset shares if the group changes and we are not in initial edit load
+    if (!initialData) {
+      setShares({});
+    }
+  }, [watchGroupId, setValue, groups]);
 
   const handleSharesChange = (newShares) => {
     setShares(newShares);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleFormSubmit = (data) => {
+    const totalAmount = Number(data.amount);
 
-    if (!groupId) {
-      toast.error('Please select a group.');
-      return;
-    }
-    if (!title.trim()) {
-      toast.error('Please enter an expense title.');
-      return;
-    }
-    if (!amount || Number(amount) <= 0) {
-      toast.error('Please enter a valid amount greater than 0.');
-      return;
+    if (data.splitType === 'custom') {
+      const sumShares = Object.values(shares).reduce((sum, v) => sum + (Number(v) || 0), 0);
+      const isBalanced = Math.abs(sumShares - totalAmount) < 0.1;
+
+      if (!isBalanced) {
+        toast.error(`The split amounts (₹${sumShares}) do not match the total expense amount (₹${totalAmount}).`);
+        return;
+      }
     }
 
-    const members = selectedGroup ? selectedGroup.members : ['You'];
-    const totalAmount = Number(amount);
-
-    // Validate splits
-    const sumShares = Object.values(shares).reduce((sum, v) => sum + (Number(v) || 0), 0);
-    const isBalanced = Math.abs(sumShares - totalAmount) < 0.1;
-
-    if (!isBalanced) {
-      toast.error('The split amounts do not match the total expense amount.');
-      return;
-    }
-
-    const expenseData = {
-      groupId,
-      title: title.trim(),
+    onSave({
+      ...data,
       amount: totalAmount,
-      paidBy,
-      category,
-      notes: notes.trim(),
-      date,
-      splitType,
       shares
-    };
-
-    onSave(expenseData);
+    });
   };
 
-  const members = selectedGroup ? selectedGroup.members : ['You'];
-
   return (
-    <form onSubmit={handleSubmit} className="auth-form">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="auth-form">
       
       {!defaultGroupId && !initialData && (
         <div className="form-group">
           <label htmlFor="expense-group" className="input-label">Group</label>
           <select
             id="expense-group"
-            value={groupId}
-            onChange={handleGroupChange}
-            className="form-select"
+            {...register('groupId')}
+            className={`form-select ${errors.groupId ? 'error' : ''}`}
             required
           >
             <option value="" disabled>Select a group</option>
@@ -130,26 +121,29 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
           </select>
+          {errors.groupId && <span className="error-text">{errors.groupId.message}</span>}
         </div>
       )}
 
       <Input
         label="Expense Title"
+        name="title"
         type="text"
         placeholder="e.g. Broadband, Dinner, Groceries"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
+        register={register}
+        errors={errors}
         required
       />
 
       <div className="form-grid-2">
         <Input
           label="Total Amount (₹)"
+          name="amount"
           type="number"
           step="any"
           placeholder="0.00"
-          value={amount}
-          onChange={handleAmountChange}
+          register={register}
+          errors={errors}
           required
         />
         
@@ -157,15 +151,15 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
           <label htmlFor="expense-paidby" className="input-label">Paid By</label>
           <select
             id="expense-paidby"
-            value={paidBy}
-            onChange={(e) => setPaidBy(e.target.value)}
-            className="form-select"
+            {...register('paidBy')}
+            className={`form-select ${errors.paidBy ? 'error' : ''}`}
             required
           >
             {members.map(member => (
               <option key={member} value={member}>{member}</option>
             ))}
           </select>
+          {errors.paidBy && <span className="error-text">{errors.paidBy.message}</span>}
         </div>
       </div>
 
@@ -174,13 +168,13 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
         <div className="category-select-grid">
           {CATEGORIES.map(cat => {
             const Icon = cat.icon;
-            const isActive = category === cat.id;
+            const isActive = watchCategory === cat.id;
             return (
               <button
                 key={cat.id}
                 type="button"
                 className={`category-select-item ${isActive ? 'active' : ''}`}
-                onClick={() => setCategory(cat.id)}
+                onClick={() => setValue('category', cat.id)}
                 style={isActive ? { borderColor: cat.color, boxShadow: `0 0 0 1px ${cat.color}` } : {}}
               >
                 <Icon size={20} style={{ color: isActive ? cat.color : 'inherit' }} />
@@ -189,22 +183,25 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
             );
           })}
         </div>
+        {errors.category && <span className="error-text">{errors.category.message}</span>}
       </div>
 
       <Input
         label="Date"
+        name="date"
         type="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
+        register={register}
+        errors={errors}
         required
       />
 
       <Input
         label="Notes (Optional)"
+        name="notes"
         type="text"
         placeholder="Add details, link, etc."
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
+        register={register}
+        errors={errors}
       />
 
       <div className="form-group">
@@ -212,15 +209,15 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
         <div className="split-type-tabs">
           <button
             type="button"
-            className={`split-type-tab ${splitType === 'equal' ? 'active' : ''}`}
-            onClick={() => setSplitType('equal')}
+            className={`split-type-tab ${watchSplitType === 'equal' ? 'active' : ''}`}
+            onClick={() => setValue('splitType', 'equal')}
           >
             Split Equally
           </button>
           <button
             type="button"
-            className={`split-type-tab ${splitType === 'custom' ? 'active' : ''}`}
-            onClick={() => setSplitType('custom')}
+            className={`split-type-tab ${watchSplitType === 'custom' ? 'active' : ''}`}
+            onClick={() => setValue('splitType', 'custom')}
           >
             Split Manually
           </button>
@@ -229,8 +226,8 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
 
       <SplitSelector
         members={members}
-        amount={amount}
-        splitType={splitType}
+        amount={watchAmount || 0}
+        splitType={watchSplitType}
         shares={shares}
         onChange={handleSharesChange}
       />

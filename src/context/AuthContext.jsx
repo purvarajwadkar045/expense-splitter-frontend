@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
+import userService from '../services/userService';
 import showToast from '../components/ui/Toast';
 
 export const AuthContext = createContext();
@@ -15,19 +16,18 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = async () => {
       if (token) {
         try {
-          // If token is found, fetch or construct user profile
+          // If token is found, fetch user profile from backend
+          const fetchedUser = await userService.getCurrentUser();
+          setUser(fetchedUser);
+          localStorage.setItem('user', JSON.stringify(fetchedUser));
+        } catch (error) {
+          console.error('Failed to restore session from server, using local cache:', error);
           const storedUser = localStorage.getItem('user');
           if (storedUser) {
             setUser(JSON.parse(storedUser));
           } else {
-            // Build default user profile from JWT payload or simulate it
-            const defaultUser = { name: 'Priya Patel', email: 'priya@example.com', joinedDate: '2026-02-14' };
-            setUser(defaultUser);
-            localStorage.setItem('user', JSON.stringify(defaultUser));
+            logout();
           }
-        } catch (error) {
-          console.error('Failed to restore session:', error);
-          logout();
         }
       }
       setLoading(false);
@@ -36,46 +36,52 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, [token]);
 
+  // Subscribe to automatic 401 logouts from API response interceptor
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setToken(null);
+      setUser(null);
+      showToast.error('Session expired. Please log in again.');
+      navigate('/login');
+    };
+
+    window.addEventListener('auth-logout', handleAuthLogout);
+    return () => window.removeEventListener('auth-logout', handleAuthLogout);
+  }, [navigate]);
+
   const login = async (credentials) => {
     setLoading(true);
     try {
       const data = await authService.login(credentials);
-      // FastAPI returns { access_token, token_type }
       const receivedToken = data.access_token;
       
-      // Simulate profile mapping (or fetch from /auth/me if built)
-      const loggedUser = { 
-        name: credentials.email.split('@')[0], 
-        email: credentials.email,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
-
       localStorage.setItem('token', receivedToken);
-      localStorage.setItem('user', JSON.stringify(loggedUser));
-      
       setToken(receivedToken);
+
+      let loggedUser;
+      try {
+        loggedUser = await userService.getCurrentUser();
+      } catch (err) {
+        console.warn('Could not fetch user profile, creating fallback details.');
+        loggedUser = { 
+          name: credentials.email.split('@')[0], 
+          email: credentials.email,
+          joinedDate: new Date().toISOString().split('T')[0]
+        };
+      }
+
+      localStorage.setItem('user', JSON.stringify(loggedUser));
       setUser(loggedUser);
       
       showToast.success('Successfully authenticated!');
       navigate('/dashboard');
     } catch (error) {
-      // Offline fallback for seamless testing
-      console.warn('Backend offline, proceeding with premium local login fallback...');
-      const simulatedToken = 'offline_token_' + Date.now();
-      const loggedUser = { 
-        name: credentials.email.split('@')[0], 
-        email: credentials.email,
-        joinedDate: '2026-03-20'
-      };
-      
-      localStorage.setItem('token', simulatedToken);
-      localStorage.setItem('user', JSON.stringify(loggedUser));
-      
-      setToken(simulatedToken);
-      setUser(loggedUser);
-      
-      showToast.success('Logged in (Local Sandbox Mode)');
-      navigate('/dashboard');
+      console.error('Login error:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to authenticate';
+      showToast.error(errorMsg);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -85,40 +91,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       await authService.register(userData);
-      
-      // Immediately log the user in locally
-      const simulatedToken = 'register_token_' + Date.now();
-      const newUser = { 
-        name: userData.name, 
-        email: userData.email,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
-
-      localStorage.setItem('token', simulatedToken);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      
-      setToken(simulatedToken);
-      setUser(newUser);
-      
-      showToast.success('Welcome! Account created successfully!');
-      navigate('/dashboard');
+      showToast.success('Account created successfully!');
+      // Auto login after registration
+      await login({ email: userData.email, password: userData.password });
     } catch (error) {
-      console.warn('Backend offline, registering user in sandbox mode...');
-      const simulatedToken = 'sandbox_token_' + Date.now();
-      const newUser = { 
-        name: userData.name, 
-        email: userData.email,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
-
-      localStorage.setItem('token', simulatedToken);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      
-      setToken(simulatedToken);
-      setUser(newUser);
-      
-      showToast.success('Account initialized (Local Sandbox Mode)');
-      navigate('/dashboard');
+      console.error('Registration error:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to register account';
+      showToast.error(errorMsg);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -131,9 +111,10 @@ export const AuthProvider = ({ children }) => {
       showToast.success('OTP security code sent to your email!');
       navigate('/reset-password', { state: { email } });
     } catch (error) {
-      console.warn('Backend offline, bypass OTP to reset password...');
-      showToast.success('Bypassing OTP (Local Sandbox Mode)');
-      navigate('/reset-password', { state: { email } });
+      console.error('Forgot password error:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to send OTP';
+      showToast.error(errorMsg);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -142,13 +123,14 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = async (email, code, newPassword) => {
     setLoading(true);
     try {
-      // Simulate password update
       await authService.changePassword(code, newPassword);
       showToast.success('Password updated successfully!');
       navigate('/login');
     } catch (error) {
-      showToast.success('Password updated (Local Sandbox Mode)');
-      navigate('/login');
+      console.error('Reset password error:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to reset password';
+      showToast.error(errorMsg);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -158,10 +140,16 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const res = await authService.updateProfile(name);
-      setUser(res.user);
+      // Backend should return user profile: { id, name, email } or similar
+      const updatedUser = res.user || res;
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
       showToast.success('Profile details saved!');
     } catch (error) {
-      showToast.error('Failed to save profile changes');
+      console.error('Update profile error:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to save profile changes';
+      showToast.error(errorMsg);
+      throw error;
     } finally {
       setLoading(false);
     }

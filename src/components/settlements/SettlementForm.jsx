@@ -1,8 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { MdCheckCircle, MdPayment } from 'react-icons/md';
+import React, { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
+import { MdPayment } from 'react-icons/md';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import useToast from '../../hooks/useToast';
+
+const schema = yup.object().shape({
+  from: yup.string().required('Debtor payer is required'),
+  to: yup
+    .string()
+    .required('Recipient creditor is required')
+    .notOneOf([yup.ref('from')], 'Payer and recipient must be different members'),
+  amount: yup
+    .number()
+    .transform((value, originalValue) => originalValue === '' ? undefined : value)
+    .required('Repayment amount is required')
+    .positive('Amount must be positive')
+    .typeError('Please enter a valid amount'),
+  method: yup.string().required('Payment method is required'),
+});
 
 const SettlementForm = ({ 
   members = [], 
@@ -11,68 +29,64 @@ const SettlementForm = ({
   onCancel 
 }) => {
   const toast = useToast();
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState('UPI');
 
-  // Set default values from the first suggested settlement if available
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      from: '',
+      to: '',
+      amount: '',
+      method: 'UPI',
+    },
+  });
+
+  const handleSelectSuggestion = (sugg) => {
+    setValue('from', sugg.from);
+    setValue('to', sugg.to);
+    setValue('amount', sugg.amount.toString());
+    toast.info(`Pre-filled settlement: ${sugg.from} ➔ ${sugg.to} (₹${sugg.amount})`);
+  };
+
+  // Set default values from suggestion or member list
   useEffect(() => {
     if (suggestedSettlements.length > 0) {
       handleSelectSuggestion(suggestedSettlements[0]);
     } else {
+      let defaultFrom = '';
       if (members.includes('You')) {
-        setFrom('You');
+        defaultFrom = 'You';
       } else if (members.length > 0) {
-        setFrom(members[0]);
+        defaultFrom = members[0];
       }
+      setValue('from', defaultFrom);
+
+      const potentialCreditors = members.filter(m => m !== defaultFrom && m !== 'You');
+      const fallbackTo = members.filter(m => m !== defaultFrom);
       
-      const potentialCreditors = members.filter(m => m !== 'You');
+      let defaultTo = '';
       if (potentialCreditors.length > 0) {
-        setTo(potentialCreditors[0]);
+        defaultTo = potentialCreditors[0];
+      } else if (fallbackTo.length > 0) {
+        defaultTo = fallbackTo[0];
       }
+      setValue('to', defaultTo);
     }
-  }, [suggestedSettlements, members]);
+  }, [suggestedSettlements, members, setValue]);
 
-  const handleSelectSuggestion = (sugg) => {
-    setFrom(sugg.from);
-    setTo(sugg.to);
-    setAmount(sugg.amount.toString());
-    toast.info(`Pre-filled settlement: ${sugg.from} ➔ ${sugg.to} (₹${sugg.amount})`);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    if (!from) {
-      toast.error('Please select who is paying.');
-      return;
-    }
-    if (!to) {
-      toast.error('Please select who is receiving.');
-      return;
-    }
-    if (from === to) {
-      toast.error('Payer and recipient must be different members.');
-      return;
-    }
-    if (!amount || Number(amount) <= 0) {
-      toast.error('Please enter a valid amount greater than 0.');
-      return;
-    }
-
-    const settlementData = {
-      from,
-      to,
-      amount: Number(amount),
-      method
-    };
-
-    onSave(settlementData);
+  const handleFormSubmit = (data) => {
+    onSave({
+      ...data,
+      amount: Number(data.amount)
+    });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="auth-form">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="auth-form">
       
       {suggestedSettlements.length > 0 && (
         <div className="form-group">
@@ -108,9 +122,8 @@ const SettlementForm = ({
           <label htmlFor="settle-from" className="input-label">Who Paid? (Debtor)</label>
           <select
             id="settle-from"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="form-select"
+            {...register('from')}
+            className={`form-select ${errors.from ? 'error' : ''}`}
             required
           >
             <option value="" disabled>Select payer</option>
@@ -118,15 +131,15 @@ const SettlementForm = ({
               <option key={member} value={member}>{member}</option>
             ))}
           </select>
+          {errors.from && <span className="error-text">{errors.from.message}</span>}
         </div>
 
         <div className="form-group">
           <label htmlFor="settle-to" className="input-label">Who Received? (Creditor)</label>
           <select
             id="settle-to"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="form-select"
+            {...register('to')}
+            className={`form-select ${errors.to ? 'error' : ''}`}
             required
           >
             <option value="" disabled>Select recipient</option>
@@ -134,17 +147,19 @@ const SettlementForm = ({
               <option key={member} value={member}>{member}</option>
             ))}
           </select>
+          {errors.to && <span className="error-text">{errors.to.message}</span>}
         </div>
       </div>
 
       <div className="form-grid-2">
         <Input
           label="Repayment Amount (₹)"
+          name="amount"
           type="number"
           step="any"
           placeholder="0.00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          register={register}
+          errors={errors}
           required
         />
 
@@ -152,9 +167,8 @@ const SettlementForm = ({
           <label htmlFor="settle-method" className="input-label">Payment Method</label>
           <select
             id="settle-method"
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="form-select"
+            {...register('method')}
+            className={`form-select ${errors.method ? 'error' : ''}`}
             required
           >
             <option value="UPI">UPI (GPay/PhonePe)</option>
@@ -162,6 +176,7 @@ const SettlementForm = ({
             <option value="NetBanking">Bank Transfer</option>
             <option value="Other">Other</option>
           </select>
+          {errors.method && <span className="error-text">{errors.method.message}</span>}
         </div>
       </div>
 

@@ -36,17 +36,17 @@ const authService = {
     return response.data;
   },
 
-  // Mock Fallbacks for Profile & password edits (since not present in FastAPI routers yet)
   updateProfile: async (name) => {
-    const localUser = JSON.parse(localStorage.getItem('user')) || {};
-    localUser.name = name;
-    localStorage.setItem('user', JSON.stringify(localUser));
-    return { success: true, user: localUser };
+    const response = await API.put('/users/me', { name });
+    return response.data; // expects updated UserResponse
   },
 
   changePassword: async (currentPassword, newPassword) => {
-    // simulate password change
-    return { success: true, message: 'Password updated successfully!' };
+    const response = await API.post('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword
+    });
+    return response.data; // expects MessageResponse
   }
 };
 

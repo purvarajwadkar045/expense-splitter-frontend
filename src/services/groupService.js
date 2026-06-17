@@ -1,70 +1,33 @@
-import { INITIAL_GROUPS } from '../utils/constants';
-
-const getStoredGroups = () => {
-  const stored = localStorage.getItem('groups');
-  if (!stored) {
-    localStorage.setItem('groups', JSON.stringify(INITIAL_GROUPS));
-    return INITIAL_GROUPS;
-  }
-  return JSON.parse(stored);
-};
-
-const saveGroups = (groups) => {
-  localStorage.setItem('groups', JSON.stringify(groups));
-};
+import API from './api';
 
 const groupService = {
-  getGroups: () => {
-    return getStoredGroups();
+  getGroups: async () => {
+    const response = await API.get('/groups');
+    return response.data; // expects array of Group
   },
 
-  getGroupById: (id) => {
-    const groups = getStoredGroups();
-    return groups.find(g => g.id === id) || null;
+  getGroupById: async (id) => {
+    const response = await API.get(`/groups/${id}`);
+    return response.data; // expects Group details
   },
 
-  createGroup: (name, description, members = []) => {
-    const groups = getStoredGroups();
-    // Force including 'You' if not present
-    const cleanMembers = [...new Set(['You', ...members])];
-    
-    const newGroup = {
-      id: `g_${Date.now()}`,
+  createGroup: async (name, description, members = []) => {
+    const response = await API.post('/groups', {
       name,
       description,
-      members: cleanMembers,
-      createdDate: new Date().toISOString().split('T')[0],
-      totalExpenses: 0
-    };
-
-    const updated = [newGroup, ...groups];
-    saveGroups(updated);
-    return newGroup;
-  },
-
-  updateGroup: (id, groupData) => {
-    const groups = getStoredGroups();
-    let updatedGroup = null;
-    
-    const updated = groups.map(g => {
-      if (g.id === id) {
-        // Ensure "You" is always in the group members
-        const cleanMembers = [...new Set(['You', ...(groupData.members || g.members)])];
-        updatedGroup = { ...g, ...groupData, members: cleanMembers };
-        return updatedGroup;
-      }
-      return g;
+      members
     });
-
-    saveGroups(updated);
-    return updatedGroup;
+    return response.data; // expects Group response
   },
 
-  deleteGroup: (id) => {
-    const groups = getStoredGroups();
-    const filtered = groups.filter(g => g.id !== id);
-    saveGroups(filtered);
-    return true;
+  updateGroup: async (id, groupData) => {
+    const response = await API.put(`/groups/${id}`, groupData);
+    return response.data; // expects Group response
+  },
+
+  deleteGroup: async (id) => {
+    const response = await API.delete(`/groups/${id}`);
+    return response.data;
   }
 };
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { MdAdd, MdSearch, MdReceipt } from 'react-icons/md';
+import { MdAdd, MdSearch, MdRefresh } from 'react-icons/md';
 
 import ExpenseTable from '../components/expenses/ExpenseTable';
 import ExpenseForm from '../components/expenses/ExpenseForm';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
+import Loader from '../components/ui/Loader';
 
 import expenseService from '../services/expenseService';
 import groupService from '../services/groupService';
@@ -24,17 +25,33 @@ const Expenses = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
+  // Loading & Error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('');
 
   // Fetch all expenses and groups
-  const loadExpensesData = () => {
-    const fetchedExpenses = expenseService.getExpenses();
-    const fetchedGroups = groupService.getGroups();
-    
-    setExpenses(fetchedExpenses);
-    setGroups(fetchedGroups);
+  const loadExpensesData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [fetchedExpenses, fetchedGroups] = await Promise.all([
+        expenseService.getExpenses(),
+        groupService.getGroups()
+      ]);
+      
+      setExpenses(fetchedExpenses || []);
+      setGroups(fetchedGroups || []);
+    } catch (err) {
+      console.error('Failed to load expenses:', err);
+      setError('Unable to load expenses. Please check your connection and try again.');
+      toast.error('Failed to load expenses.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -51,23 +68,33 @@ const Expenses = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveExpense = (expenseData) => {
-    if (editingExpense) {
-      expenseService.updateExpense(editingExpense.id, expenseData);
-      toast.success('Expense updated successfully');
-    } else {
-      expenseService.createExpense(expenseData);
-      toast.success('Expense added successfully');
+  const handleSaveExpense = async (expenseData) => {
+    try {
+      if (editingExpense) {
+        await expenseService.updateExpense(editingExpense.id, expenseData);
+        toast.success('Expense updated successfully');
+      } else {
+        await expenseService.createExpense(expenseData);
+        toast.success('Expense added successfully');
+      }
+      setIsModalOpen(false);
+      await loadExpensesData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to save expense');
     }
-    setIsModalOpen(false);
-    loadExpensesData();
   };
 
-  const handleDeleteExpense = (id) => {
+  const handleDeleteExpense = async (id) => {
     if (window.confirm('Are you sure you want to delete this expense?')) {
-      expenseService.deleteExpense(id);
-      toast.success('Expense deleted successfully');
-      loadExpensesData();
+      try {
+        await expenseService.deleteExpense(id);
+        toast.success('Expense deleted successfully');
+        await loadExpensesData();
+      } catch (err) {
+        console.error(err);
+        toast.error(err.response?.data?.detail || 'Failed to delete expense');
+      }
     }
   };
 
@@ -80,6 +107,37 @@ const Expenses = () => {
     
     return matchesSearch && matchesGroup;
   });
+
+  if (loading) {
+    return (
+      <div className="page-container expenses-page-wrapper">
+        <header className="dashboard-header flex-header">
+          <div className="header-info">
+            <h1 className="header-title">Expenses Log</h1>
+            <p className="header-subtitle">Syncing transaction ledger...</p>
+          </div>
+        </header>
+        <Loader type="skeleton" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container expenses-page-wrapper">
+        <header className="dashboard-header">
+          <h1 className="header-title">Expenses Log</h1>
+        </header>
+        <div className="empty-state-container glass-card" style={{ padding: '40px', textAlign: 'center' }}>
+          <h3 style={{ color: 'var(--text-pure)' }}>Failed to load Expenses</h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>{error}</p>
+          <Button onClick={loadExpensesData} variant="primary" icon={MdRefresh}>
+            Retry Load
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container expenses-page-wrapper">
