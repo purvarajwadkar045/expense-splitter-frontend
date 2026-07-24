@@ -1,41 +1,93 @@
-import { INITIAL_SETTLEMENTS } from '../utils/constants';
+import API from './api';
+import groupService from './groupService';
 
-const getStoredSettlements = () => {
-  const stored = localStorage.getItem('settlements');
-  if (!stored) {
-    localStorage.setItem('settlements', JSON.stringify(INITIAL_SETTLEMENTS));
-    return INITIAL_SETTLEMENTS;
-  }
-  return JSON.parse(stored);
-};
+const mapBackendSettlementToFrontend = (settlement, groupId, membersList, currentUserName) => {
+  const memberMap = {};
+  membersList.forEach(m => {
+    memberMap[m.user_id] = m.username;
+  });
+  
+  const fromUser = memberMap[settlement.payer_id] || 'Unknown';
+  const toUser = memberMap[settlement.receiver_id] || 'Unknown';
 
-const saveSettlements = (settlements) => {
-  localStorage.setItem('settlements', JSON.stringify(settlements));
+  return {
+    id: settlement.id,
+    groupId: String(groupId || settlement.group_id),
+    from: fromUser === currentUserName ? 'You' : fromUser,
+    to: toUser === currentUserName ? 'You' : toUser,
+    amount: Number(settlement.amount),
+    date: settlement.settled_at ? new Date(settlement.settled_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    method: 'Transfer'
+  };
 };
 
 const settlementService = {
-  getSettlements: () => {
-    return getStoredSettlements();
+  getSettlements: async () => {
+    const groups = groupService.getGroups();
+    const allSettlements = [];
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+
+    const promises = groups.map(async (g) => {
+      try {
+        const balanceRes = await API.get(`/groups/${g.id}/balances`);
+        const response = await API.get(`/groups/${g.id}/settlements`);
+        const mapped = response.data.map(s => 
+          mapBackendSettlementToFrontend(s, g.id, balanceRes.data, currentUserName)
+        );
+        allSettlements.push(...mapped);
+      } catch (err) {
+        console.warn(`Failed to fetch settlements for group ${g.id}:`, err);
+      }
+    });
+    await Promise.all(promises);
+    return allSettlements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   },
 
-  getSettlementsByGroupId: (groupId) => {
-    const settlements = getStoredSettlements();
-    return settlements.filter(s => s.groupId === groupId);
+  getSettlementsByGroupId: async (groupId) => {
+    const balanceRes = await API.get(`/groups/${groupId}/balances`);
+    const response = await API.get(`/groups/${groupId}/settlements`);
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+
+    return response.data.map(s => 
+      mapBackendSettlementToFrontend(s, groupId, balanceRes.data, currentUserName)
+    );
   },
 
-  createSettlement: (settleData) => {
-    // settleData expects { groupId, from, to, amount, method }
-    const settlements = getStoredSettlements();
-    const newSettlement = {
-      id: `s_${Date.now()}`,
-      ...settleData,
-      amount: Number(settleData.amount),
-      date: new Date().toISOString().split('T')[0]
-    };
+  createSettlement: async (settleData) => {
+    const { groupId, from, to, amount } = settleData;
 
-    const updated = [newSettlement, ...settlements];
-    saveSettlements(updated);
-    return newSettlement;
+    // 1. Fetch balances to map from/to names to database user IDs
+    const balanceRes = await API.get(`/groups/${groupId}/balances`);
+    const members = balanceRes.data;
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+
+    const memberMap = {};
+    members.forEach(m => {
+      memberMap[m.username.toLowerCase()] = m.user_id;
+    });
+    if (currentUser) {
+      memberMap['you'] = currentUser.id;
+      memberMap[currentUser.name.toLowerCase()] = currentUser.id;
+    }
+
+    const payerId = from === 'You' ? currentUser.id : memberMap[from.toLowerCase()];
+    const receiverId = to === 'You' ? currentUser.id : memberMap[to.toLowerCase()];
+
+    if (!payerId || !receiverId) {
+      throw new Error(`Failed to map payer (${from}) or receiver (${to}) to database user IDs.`);
+    }
+
+    // 2. Post settlement to backend
+    const response = await API.post(`/groups/${groupId}/settlements`, {
+      payer_id: payerId,
+      receiver_id: receiverId,
+      amount: Number(amount)
+    });
+
+    return mapBackendSettlementToFrontend(response.data, groupId, members, currentUserName);
   }
 };
 
