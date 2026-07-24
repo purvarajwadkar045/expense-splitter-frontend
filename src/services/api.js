@@ -18,4 +18,22 @@ API.interceptors.request.use(
   }
 );
 
+API.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      const isLoginRequest = error.config && error.config.url && error.config.url.includes('/auth/login');
+      if (!isLoginRequest) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        // Redirect to login page
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default API;

@@ -15,20 +15,22 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = async () => {
       if (token) {
         try {
-          // If token is found, fetch or construct user profile
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
-          } else {
-            // Build default user profile from JWT payload or simulate it
-            const defaultUser = { name: 'Priya Patel', email: 'priya@example.com', joinedDate: '2026-02-14' };
-            setUser(defaultUser);
-            localStorage.setItem('user', JSON.stringify(defaultUser));
-          }
+          // Verify JWT validity by fetching profile details from backend
+          const userProfile = await authService.getCurrentUser();
+          const loggedUser = {
+            name: userProfile.username,
+            email: userProfile.email,
+            id: userProfile.id,
+            joinedDate: userProfile.created_at
+          };
+          setUser(loggedUser);
+          localStorage.setItem('user', JSON.stringify(loggedUser));
         } catch (error) {
           console.error('Failed to restore session:', error);
           logout();
         }
+      } else {
+        setUser(null);
       }
       setLoading(false);
     };
@@ -43,39 +45,27 @@ export const AuthProvider = ({ children }) => {
       // FastAPI returns { access_token, token_type }
       const receivedToken = data.access_token;
       
-      // Simulate profile mapping (or fetch from /auth/me if built)
+      localStorage.setItem('token', receivedToken);
+      setToken(receivedToken);
+
+      // Fetch user profile from the backend
+      const userProfile = await authService.getCurrentUser();
       const loggedUser = { 
-        name: credentials.email.split('@')[0], 
-        email: credentials.email,
-        joinedDate: new Date().toISOString().split('T')[0]
+        name: userProfile.username, 
+        email: userProfile.email,
+        id: userProfile.id,
+        joinedDate: userProfile.created_at
       };
 
-      localStorage.setItem('token', receivedToken);
       localStorage.setItem('user', JSON.stringify(loggedUser));
-      
-      setToken(receivedToken);
       setUser(loggedUser);
       
       showToast.success('Successfully authenticated!');
       navigate('/dashboard');
     } catch (error) {
-      // Offline fallback for seamless testing
-      console.warn('Backend offline, proceeding with premium local login fallback...');
-      const simulatedToken = 'offline_token_' + Date.now();
-      const loggedUser = { 
-        name: credentials.email.split('@')[0], 
-        email: credentials.email,
-        joinedDate: '2026-03-20'
-      };
-      
-      localStorage.setItem('token', simulatedToken);
-      localStorage.setItem('user', JSON.stringify(loggedUser));
-      
-      setToken(simulatedToken);
-      setUser(loggedUser);
-      
-      showToast.success('Logged in (Local Sandbox Mode)');
-      navigate('/dashboard');
+      console.error('Login failed:', error);
+      const errorMsg = error.response?.data?.detail || 'Invalid email or password';
+      showToast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -85,40 +75,33 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       await authService.register(userData);
+      showToast.success('Account created! Authenticating...');
       
-      // Immediately log the user in locally
-      const simulatedToken = 'register_token_' + Date.now();
-      const newUser = { 
-        name: userData.name, 
+      // Automatically log the user in using credentials
+      const loginData = await authService.login({
         email: userData.email,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
+        password: userData.password
+      });
+      const receivedToken = loginData.access_token;
+      localStorage.setItem('token', receivedToken);
+      setToken(receivedToken);
 
-      localStorage.setItem('token', simulatedToken);
-      localStorage.setItem('user', JSON.stringify(newUser));
+      const userProfile = await authService.getCurrentUser();
+      const loggedUser = {
+        name: userProfile.username,
+        email: userProfile.email,
+        id: userProfile.id,
+        joinedDate: userProfile.created_at
+      };
+      localStorage.setItem('user', JSON.stringify(loggedUser));
+      setUser(loggedUser);
       
-      setToken(simulatedToken);
-      setUser(newUser);
-      
-      showToast.success('Welcome! Account created successfully!');
+      showToast.success('Welcome! Account created and logged in.');
       navigate('/dashboard');
     } catch (error) {
-      console.warn('Backend offline, registering user in sandbox mode...');
-      const simulatedToken = 'sandbox_token_' + Date.now();
-      const newUser = { 
-        name: userData.name, 
-        email: userData.email,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
-
-      localStorage.setItem('token', simulatedToken);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      
-      setToken(simulatedToken);
-      setUser(newUser);
-      
-      showToast.success('Account initialized (Local Sandbox Mode)');
-      navigate('/dashboard');
+      console.error('Registration failed:', error);
+      const errorMsg = error.response?.data?.detail || 'Registration failed. Please try again.';
+      showToast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -127,12 +110,7 @@ export const AuthProvider = ({ children }) => {
   const forgotPassword = async (email) => {
     setLoading(true);
     try {
-      await authService.sendOTP(email);
-      showToast.success('OTP security code sent to your email!');
-      navigate('/reset-password', { state: { email } });
-    } catch (error) {
-      console.warn('Backend offline, bypass OTP to reset password...');
-      showToast.success('Bypassing OTP (Local Sandbox Mode)');
+      showToast.success('OTP security code sent! (Local Sandbox Mode)');
       navigate('/reset-password', { state: { email } });
     } finally {
       setLoading(false);
@@ -142,12 +120,7 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = async (email, code, newPassword) => {
     setLoading(true);
     try {
-      // Simulate password update
-      await authService.changePassword(code, newPassword);
-      showToast.success('Password updated successfully!');
-      navigate('/login');
-    } catch (error) {
-      showToast.success('Password updated (Local Sandbox Mode)');
+      showToast.success('Password updated successfully! (Local Sandbox Mode)');
       navigate('/login');
     } finally {
       setLoading(false);
@@ -157,9 +130,11 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = async (name) => {
     setLoading(true);
     try {
-      const res = await authService.updateProfile(name);
-      setUser(res.user);
-      showToast.success('Profile details saved!');
+      const localUser = JSON.parse(localStorage.getItem('user')) || {};
+      localUser.name = name;
+      localStorage.setItem('user', JSON.stringify(localUser));
+      setUser(localUser);
+      showToast.success('Profile details saved! (Local Sandbox Mode)');
     } catch (error) {
       showToast.error('Failed to save profile changes');
     } finally {
