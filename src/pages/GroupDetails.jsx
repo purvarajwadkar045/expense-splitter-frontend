@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MdArrowBack, MdAdd, MdPayment, MdSettings, MdDelete, MdInfoOutline, MdPeople } from 'react-icons/md';
+import { MdArrowBack, MdAdd, MdPayment, MdSettings, MdDelete, MdPeople } from 'react-icons/md';
 
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import EmptyState from '../components/ui/EmptyState';
 import StatCard from '../components/ui/StatCard';
+import Loader from '../components/ui/Loader';
 
 // Subcomponents
 import ExpenseTable from '../components/expenses/ExpenseTable';
@@ -34,8 +35,9 @@ const GroupDetails = () => {
   const [expenses, setExpenses] = useState([]);
   const [settlements, setSettlements] = useState([]);
   const [debts, setDebts] = useState({ netBalances: {}, simplifiedPayments: [] });
+  const [loading, setLoading] = useState(true);
 
-  // Tab state: 'expenses' | 'settlements' | 'members'
+  // Tab state: 'expenses' | 'settlements'
   const [activeTab, setActiveTab] = useState('expenses');
 
   // Modals state
@@ -46,50 +48,90 @@ const GroupDetails = () => {
 
   // Load all details
   const loadGroupDetails = () => {
-    const g = groupService.getGroupById(id);
-    if (!g) {
-      toast.error('Group not found');
-      navigate('/groups');
-      return;
+    setLoading(true);
+    try {
+      const g = groupService.getGroupById(id);
+      if (!g) {
+        toast.error('Group not found');
+        navigate('/groups');
+        return;
+      }
+      setGroup(g);
+
+      const groupExpenses = expenseService.getExpensesByGroupId(id);
+      const groupSettlements = settlementService.getSettlementsByGroupId(id);
+
+      setExpenses(groupExpenses);
+      setSettlements(groupSettlements);
+
+      const calculatedDebts = calculateSimplifiedDebts(g.members, groupExpenses, groupSettlements);
+      setDebts(calculatedDebts);
+    } catch (err) {
+      console.error('Failed to load details:', err);
+      toast.error('Failed to load group details.');
+    } finally {
+      setLoading(false);
     }
-    setGroup(g);
-
-    const groupExpenses = expenseService.getExpensesByGroupId(id);
-    const groupSettlements = settlementService.getSettlementsByGroupId(id);
-
-    setExpenses(groupExpenses);
-    setSettlements(groupSettlements);
-
-    const calculatedDebts = calculateSimplifiedDebts(g.members, groupExpenses, groupSettlements);
-    setDebts(calculatedDebts);
   };
 
   useEffect(() => {
     loadGroupDetails();
   }, [id]);
 
+  if (loading) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-deep)'
+        }}
+      >
+        <Loader />
+      </div>
+    );
+  }
+
   if (!group) return null;
 
   // Actions
-  const handleEditGroupSettings = (groupData) => {
-    groupService.updateGroup(id, groupData);
-    toast.success('Group settings updated');
-    setIsSettingsOpen(false);
-    loadGroupDetails();
+  const handleEditGroupSettings = async (groupData) => {
+    setLoading(true);
+    try {
+      await groupService.updateGroup(id, groupData);
+      toast.success('Group settings updated');
+      setIsSettingsOpen(false);
+      loadGroupDetails();
+    } catch (err) {
+      console.error('Update settings failed:', err);
+      toast.error(err.response?.data?.detail || 'Failed to update settings.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteGroup = () => {
+  const handleDeleteGroup = async () => {
     if (window.confirm('Are you sure you want to delete this group? All expenses and settlements log will be purged.')) {
-      groupService.deleteGroup(id);
-      
-      // Purge matching expenses/settlements
-      const allExpenses = expenseService.getExpenses();
-      const allSettlements = settlementService.getSettlements();
-      localStorage.setItem('expenses', JSON.stringify(allExpenses.filter(e => e.groupId !== id)));
-      localStorage.setItem('settlements', JSON.stringify(allSettlements.filter(s => s.groupId !== id)));
-      
-      toast.success('Group deleted successfully');
-      navigate('/groups');
+      setLoading(true);
+      try {
+        await groupService.deleteGroup(id);
+        
+        // Purge matching expenses/settlements locally
+        const allExpenses = expenseService.getExpenses();
+        const allSettlements = settlementService.getSettlements();
+        localStorage.setItem('expenses', JSON.stringify(allExpenses.filter(e => String(e.groupId) !== String(id))));
+        localStorage.setItem('settlements', JSON.stringify(allSettlements.filter(s => String(s.groupId) !== String(id))));
+        
+        toast.success('Group deleted successfully');
+        navigate('/groups');
+      } catch (err) {
+        console.error('Delete failed:', err);
+        toast.error('Failed to delete group.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -122,6 +164,11 @@ const GroupDetails = () => {
     toast.success('Repayment settled!');
     setIsSettleOpen(false);
     loadGroupDetails();
+  };
+
+  const openEditModal = (expense) => {
+    setEditingExpense(expense);
+    setIsExpenseOpen(true);
   };
 
   const myBalance = debts.netBalances['You'] || 0;

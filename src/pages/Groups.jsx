@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MdGroupAdd, MdGroup } from 'react-icons/md';
+import { MdGroupAdd } from 'react-icons/md';
 
 import GroupCard from '../components/groups/GroupCard';
 import GroupForm from '../components/groups/GroupForm';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
+import Loader from '../components/ui/Loader';
 
 import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
@@ -23,38 +24,47 @@ const Groups = () => {
   const toast = useToast();
 
   const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
 
-  // Load all groups and dynamic balances
+  // Load all groups and calculate dynamic balances
   const loadGroupsData = () => {
-    const fetchedGroups = groupService.getGroups();
-    const allExpenses = expenseService.getExpenses();
-    const allSettlements = settlementService.getSettlements();
+    setLoading(true);
+    try {
+      const fetchedGroups = groupService.getGroups();
+      const allExpenses = expenseService.getExpenses();
+      const allSettlements = settlementService.getSettlements();
 
-    const groupsWithBalances = fetchedGroups.map((g) => {
-      const groupExpenses = allExpenses.filter((e) => e.groupId === g.id);
-      const groupSettlements = allSettlements.filter((s) => s.groupId === g.id);
-      
-      const { netBalances } = calculateSimplifiedDebts(
-        g.members,
-        groupExpenses,
-        groupSettlements
-      );
+      const groupsWithBalances = fetchedGroups.map((g) => {
+        const groupExpenses = allExpenses.filter((e) => String(e.groupId) === String(g.id));
+        const groupSettlements = allSettlements.filter((s) => String(s.groupId) === String(g.id));
+        
+        const { netBalances } = calculateSimplifiedDebts(
+          g.members,
+          groupExpenses,
+          groupSettlements
+        );
 
-      const userBalance = netBalances['You'] || 0;
-      
-      // Calculate total expenses for this group
-      const totalSpent = groupExpenses.reduce((sum, e) => sum + e.amount, 0);
+        const userBalance = netBalances['You'] || 0;
+        
+        // Calculate total expenses for this group
+        const totalSpent = groupExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-      return {
-        ...g,
-        userBalance,
-        totalExpenses: totalSpent
-      };
-    });
+        return {
+          ...g,
+          userBalance,
+          totalExpenses: totalSpent
+        };
+      });
 
-    setGroups(groupsWithBalances);
+      setGroups(groupsWithBalances);
+    } catch (err) {
+      console.error('Failed to load groups data:', err);
+      toast.error('Failed to load groups data.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -71,35 +81,68 @@ const Groups = () => {
     setIsModalOpen(true);
   };
 
-  const handleFormSubmit = (data) => {
-    if (editingGroup) {
-      groupService.updateGroup(editingGroup.id, data);
-      toast.success('Group updated successfully');
-    } else {
-      groupService.createGroup(data.name, data.description, data.members);
-      toast.success('Group created successfully');
-    }
-    setIsModalOpen(false);
-    loadGroupsData();
-  };
-
-  const handleDeleteGroup = (id) => {
-    if (window.confirm('Are you sure you want to delete this group? All associated expenses will be lost.')) {
-      groupService.deleteGroup(id);
-      // Clean up group expenses and settlements
-      const allExpenses = expenseService.getExpenses();
-      const allSettlements = settlementService.getSettlements();
-      
-      const filteredExpenses = allExpenses.filter(e => e.groupId !== id);
-      const filteredSettlements = allSettlements.filter(s => s.groupId !== id);
-      
-      localStorage.setItem('expenses', JSON.stringify(filteredExpenses));
-      localStorage.setItem('settlements', JSON.stringify(filteredSettlements));
-
-      toast.success('Group deleted successfully');
+  const handleFormSubmit = async (data) => {
+    setLoading(true);
+    try {
+      if (editingGroup) {
+        await groupService.updateGroup(editingGroup.id, data);
+        toast.success('Group updated successfully');
+      } else {
+        await groupService.createGroup(data.name, data.description, data.members);
+        toast.success('Group created successfully');
+      }
+      setIsModalOpen(false);
       loadGroupsData();
+    } catch (err) {
+      console.error('Group action failed:', err);
+      toast.error(err.response?.data?.detail || 'An error occurred during submission.');
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleDeleteGroup = async (id) => {
+    if (window.confirm('Are you sure you want to delete this group? All associated expenses will be lost.')) {
+      setLoading(true);
+      try {
+        await groupService.deleteGroup(id);
+        
+        // Clean up group expenses and settlements locally
+        const allExpenses = expenseService.getExpenses();
+        const allSettlements = settlementService.getSettlements();
+        
+        const filteredExpenses = allExpenses.filter(e => String(e.groupId) !== String(id));
+        const filteredSettlements = allSettlements.filter(s => String(s.groupId) !== String(id));
+        
+        localStorage.setItem('expenses', JSON.stringify(filteredExpenses));
+        localStorage.setItem('settlements', JSON.stringify(filteredSettlements));
+
+        toast.success('Group deleted successfully');
+        loadGroupsData();
+      } catch (err) {
+        console.error('Delete failed:', err);
+        toast.error('Failed to delete group.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-deep)'
+        }}
+      >
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="page-container groups-page-wrapper">
