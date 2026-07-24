@@ -1,78 +1,167 @@
-import { INITIAL_EXPENSES } from '../utils/constants';
+import API from './api';
 import groupService from './groupService';
 
-const getStoredExpenses = () => {
-  const stored = localStorage.getItem('expenses');
-  if (!stored) {
-    localStorage.setItem('expenses', JSON.stringify(INITIAL_EXPENSES));
-    return INITIAL_EXPENSES;
-  }
-  return JSON.parse(stored);
-};
-
-const saveExpenses = (expenses) => {
-  localStorage.setItem('expenses', JSON.stringify(expenses));
-  
-  // Recalculate group totals whenever expenses change
-  const groups = groupService.getGroups();
-  const updatedGroups = groups.map(g => {
-    const groupExpenses = expenses.filter(e => e.groupId === g.id);
-    const total = groupExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    return { ...g, totalExpenses: total };
-  });
-  localStorage.setItem('groups', JSON.stringify(updatedGroups));
+const mapBackendExpenseToFrontend = (exp, groupId, currentUserName) => {
+  return {
+    id: exp.id,
+    groupId: String(groupId || exp.group_id),
+    title: exp.title,
+    amount: Number(exp.amount),
+    paidBy: exp.paid_by === currentUserName ? 'You' : exp.paid_by,
+    splitType: 'equal',
+    category: 'Others', // category is frontend UI helper state
+    date: exp.created_at ? new Date(exp.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    notes: exp.description || '',
+    shares: {}
+  };
 };
 
 const expenseService = {
-  getExpenses: () => {
-    return getStoredExpenses();
+  getExpenses: async (groupId = '') => {
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+
+    if (groupId) {
+      const response = await API.get(`/groups/${groupId}/expenses`);
+      return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName));
+    } else {
+      const groups = groupService.getGroups();
+      const allExpenses = [];
+      const promises = groups.map(async (g) => {
+        try {
+          const response = await API.get(`/groups/${g.id}/expenses`);
+          const mapped = response.data.map(exp => mapBackendExpenseToFrontend(exp, g.id, currentUserName));
+          allExpenses.push(...mapped);
+        } catch (err) {
+          console.warn(`Failed to fetch expenses for group ${g.id}:`, err);
+        }
+      });
+      await Promise.all(promises);
+      return allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
   },
 
-  getExpensesByGroupId: (groupId) => {
-    const expenses = getStoredExpenses();
-    return expenses.filter(e => e.groupId === groupId);
+  getExpensesByGroupId: async (groupId) => {
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+    const response = await API.get(`/groups/${groupId}/expenses`);
+    return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName));
   },
 
-  createExpense: (expenseData) => {
-    // expenseData expects { groupId, title, amount, paidBy, category, notes, splitType, shares }
-    const expenses = getStoredExpenses();
-    const newExpense = {
-      id: `e_${Date.now()}`,
-      ...expenseData,
-      amount: Number(expenseData.amount),
-      date: expenseData.date || new Date().toISOString().split('T')[0]
-    };
+  createExpense: async (expenseData) => {
+    const groupId = expenseData.groupId;
     
-    const updated = [newExpense, ...expenses];
-    saveExpenses(updated);
-    return newExpense;
-  },
-
-  updateExpense: (id, expenseData) => {
-    const expenses = getStoredExpenses();
-    let updatedExpense = null;
-
-    const updated = expenses.map(e => {
-      if (e.id === id) {
-        updatedExpense = { 
-          ...e, 
-          ...expenseData, 
-          amount: Number(expenseData.amount)
-        };
-        return updatedExpense;
-      }
-      return e;
+    // 1. Post expense details to backend
+    const response = await API.post(`/groups/${groupId}/expenses`, {
+      title: expenseData.title,
+      amount: Number(expenseData.amount),
+      description: expenseData.notes || ''
     });
+    const createdExpense = response.data; // ExpenseResponse
+    const expenseId = createdExpense.id;
 
-    saveExpenses(updated);
-    return updatedExpense;
+    // 2. Fetch group balances to map member usernames to user IDs
+    try {
+      const balanceRes = await API.get(`/groups/${groupId}/balances`);
+      const members = balanceRes.data;
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      
+      const memberMap = {};
+      members.forEach(m => {
+        memberMap[m.username.toLowerCase()] = m.user_id;
+      });
+      if (currentUser) {
+        memberMap['you'] = currentUser.id;
+        memberMap[currentUser.name.toLowerCase()] = currentUser.id;
+      }
+
+      // If no custom splits, use all group members
+      const participantNames = Object.keys(expenseData.shares || {}).length > 0 
+        ? Object.keys(expenseData.shares) 
+        : (groupService.getGroupById(groupId)?.members || []);
+
+      const participants = [];
+      participantNames.forEach(name => {
+        if (name === 'You' && currentUser) {
+          participants.push(currentUser.id);
+        } else {
+          const uid = memberMap[name.toLowerCase()];
+          if (uid) {
+            participants.push(uid);
+          }
+        }
+      });
+
+      if (participants.length > 0) {
+        // Update split participants using PUT
+        await API.put(`/expenses/${expenseId}`, {
+          participants
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to assign splits on backend creation:', err);
+    }
+
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+    return mapBackendExpenseToFrontend(createdExpense, groupId, currentUserName);
   },
 
-  deleteExpense: (id) => {
-    const expenses = getStoredExpenses();
-    const filtered = expenses.filter(e => e.id !== id);
-    saveExpenses(filtered);
-    return true;
+  updateExpense: async (id, expenseData) => {
+    const groupId = expenseData.groupId;
+    let participants = null;
+
+    try {
+      const balanceRes = await API.get(`/groups/${groupId}/balances`);
+      const members = balanceRes.data;
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      
+      const memberMap = {};
+      members.forEach(m => {
+        memberMap[m.username.toLowerCase()] = m.user_id;
+      });
+      if (currentUser) {
+        memberMap['you'] = currentUser.id;
+        memberMap[currentUser.name.toLowerCase()] = currentUser.id;
+      }
+
+      const participantNames = Object.keys(expenseData.shares || {}).length > 0 
+        ? Object.keys(expenseData.shares) 
+        : (groupService.getGroupById(groupId)?.members || []);
+
+      participants = [];
+      participantNames.forEach(name => {
+        if (name === 'You' && currentUser) {
+          participants.push(currentUser.id);
+        } else {
+          const uid = memberMap[name.toLowerCase()];
+          if (uid) {
+            participants.push(uid);
+          }
+        }
+      });
+    } catch (err) {
+      console.warn('Failed to map user IDs during update:', err);
+    }
+
+    const payload = {
+      title: expenseData.title,
+      amount: Number(expenseData.amount),
+      description: expenseData.notes || ''
+    };
+    if (participants && participants.length > 0) {
+      payload.participants = participants;
+    }
+
+    const response = await API.put(`/expenses/${id}`, payload);
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+    return mapBackendExpenseToFrontend(response.data, groupId, currentUserName);
+  },
+
+  deleteExpense: async (id) => {
+    const response = await API.delete(`/expenses/${id}`);
+    return response.data;
   }
 };
 

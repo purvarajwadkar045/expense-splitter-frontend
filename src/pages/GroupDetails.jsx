@@ -22,6 +22,7 @@ import expenseService from '../services/expenseService';
 import settlementService from '../services/settlementService';
 import { calculateSimplifiedDebts } from '../utils/helpers';
 import useToast from '../hooks/useToast';
+import API from '../services/api';
 
 import '../styles/groups.css';
 import '../styles/dashboard.css';
@@ -47,7 +48,7 @@ const GroupDetails = () => {
   const [editingExpense, setEditingExpense] = useState(null);
 
   // Load all details
-  const loadGroupDetails = () => {
+  const loadGroupDetails = async () => {
     setLoading(true);
     try {
       const g = groupService.getGroupById(id);
@@ -58,14 +59,37 @@ const GroupDetails = () => {
       }
       setGroup(g);
 
-      const groupExpenses = expenseService.getExpensesByGroupId(id);
+      const groupExpenses = await expenseService.getExpensesByGroupId(id);
       const groupSettlements = settlementService.getSettlementsByGroupId(id);
 
       setExpenses(groupExpenses);
       setSettlements(groupSettlements);
 
-      const calculatedDebts = calculateSimplifiedDebts(g.members, groupExpenses, groupSettlements);
-      setDebts(calculatedDebts);
+      // Fetch balances and simplify from backend to render real computed values
+      const balanceRes = await API.get(`/groups/${id}/balances`);
+      const simplifyRes = await API.get(`/groups/${id}/simplify`);
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      const currentUserName = currentUser ? currentUser.name : '';
+
+      // Map balances
+      const netBalances = {};
+      balanceRes.data.forEach(b => {
+        const key = b.username === currentUserName ? 'You' : b.username;
+        netBalances[key] = b.balance;
+      });
+
+      // Map simplified payments
+      const simplifiedPayments = simplifyRes.data.map(s => {
+        const from = s.from_username === currentUserName ? 'You' : s.from_username;
+        const to = s.to_username === currentUserName ? 'You' : s.to_username;
+        return {
+          from,
+          to,
+          amount: s.amount
+        };
+      });
+
+      setDebts({ netBalances, simplifiedPayments });
     } catch (err) {
       console.error('Failed to load details:', err);
       toast.error('Failed to load group details.');
@@ -135,24 +159,40 @@ const GroupDetails = () => {
     }
   };
 
-  const handleAddExpense = (expenseData) => {
-    if (editingExpense) {
-      expenseService.updateExpense(editingExpense.id, expenseData);
-      toast.success('Expense updated');
-    } else {
-      expenseService.createExpense(expenseData);
-      toast.success('Expense added');
+  const handleAddExpense = async (expenseData) => {
+    setLoading(true);
+    try {
+      if (editingExpense) {
+        await expenseService.updateExpense(editingExpense.id, expenseData);
+        toast.success('Expense updated');
+      } else {
+        await expenseService.createExpense(expenseData);
+        toast.success('Expense added');
+      }
+      setIsExpenseOpen(false);
+      setEditingExpense(null);
+      await loadGroupDetails();
+    } catch (err) {
+      console.error('Failed to add/update expense:', err);
+      toast.error(err.response?.data?.detail || 'Failed to submit expense.');
+    } finally {
+      setLoading(false);
     }
-    setIsExpenseOpen(false);
-    setEditingExpense(null);
-    loadGroupDetails();
   };
 
-  const handleDeleteExpense = (expId) => {
+  const handleDeleteExpense = async (expId) => {
     if (window.confirm('Delete this expense entry?')) {
-      expenseService.deleteExpense(expId);
-      toast.success('Expense deleted');
-      loadGroupDetails();
+      setLoading(true);
+      try {
+        await expenseService.deleteExpense(expId);
+        toast.success('Expense deleted');
+        await loadGroupDetails();
+      } catch (err) {
+        console.error('Failed to delete expense:', err);
+        toast.error(err.response?.data?.detail || 'Failed to delete expense.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 

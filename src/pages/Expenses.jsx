@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { MdAdd, MdSearch, MdReceipt } from 'react-icons/md';
+import { MdAdd, MdSearch } from 'react-icons/md';
 
 import ExpenseTable from '../components/expenses/ExpenseTable';
 import ExpenseForm from '../components/expenses/ExpenseForm';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
+import Loader from '../components/ui/Loader';
 
 import expenseService from '../services/expenseService';
 import groupService from '../services/groupService';
@@ -19,6 +20,7 @@ const Expenses = () => {
 
   const [expenses, setExpenses] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -29,12 +31,20 @@ const Expenses = () => {
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('');
 
   // Fetch all expenses and groups
-  const loadExpensesData = () => {
-    const fetchedExpenses = expenseService.getExpenses();
-    const fetchedGroups = groupService.getGroups();
-    
-    setExpenses(fetchedExpenses);
-    setGroups(fetchedGroups);
+  const loadExpensesData = async () => {
+    setLoading(true);
+    try {
+      const fetchedExpenses = await expenseService.getExpenses();
+      const fetchedGroups = groupService.getGroups();
+      
+      setExpenses(fetchedExpenses);
+      setGroups(fetchedGroups);
+    } catch (err) {
+      console.error('Failed to load expenses list:', err);
+      toast.error('Failed to load expenses.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -51,23 +61,39 @@ const Expenses = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveExpense = (expenseData) => {
-    if (editingExpense) {
-      expenseService.updateExpense(editingExpense.id, expenseData);
-      toast.success('Expense updated successfully');
-    } else {
-      expenseService.createExpense(expenseData);
-      toast.success('Expense added successfully');
+  const handleSaveExpense = async (expenseData) => {
+    setLoading(true);
+    try {
+      if (editingExpense) {
+        await expenseService.updateExpense(editingExpense.id, expenseData);
+        toast.success('Expense updated successfully');
+      } else {
+        await expenseService.createExpense(expenseData);
+        toast.success('Expense added successfully');
+      }
+      setIsModalOpen(false);
+      await loadExpensesData();
+    } catch (err) {
+      console.error('Failed to save expense:', err);
+      toast.error(err.response?.data?.detail || 'An error occurred during submission.');
+    } finally {
+      setLoading(false);
     }
-    setIsModalOpen(false);
-    loadExpensesData();
   };
 
-  const handleDeleteExpense = (id) => {
+  const handleDeleteExpense = async (id) => {
     if (window.confirm('Are you sure you want to delete this expense?')) {
-      expenseService.deleteExpense(id);
-      toast.success('Expense deleted successfully');
-      loadExpensesData();
+      setLoading(true);
+      try {
+        await expenseService.deleteExpense(id);
+        toast.success('Expense deleted successfully');
+        await loadExpensesData();
+      } catch (err) {
+        console.error('Failed to delete expense:', err);
+        toast.error(err.response?.data?.detail || 'Failed to delete expense.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -76,10 +102,26 @@ const Expenses = () => {
     const matchesSearch = exp.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (exp.notes && exp.notes.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesGroup = selectedGroupFilter ? exp.groupId === selectedGroupFilter : true;
+    const matchesGroup = selectedGroupFilter ? String(exp.groupId) === String(selectedGroupFilter) : true;
     
     return matchesSearch && matchesGroup;
   });
+
+  if (loading) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-deep)'
+        }}
+      >
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="page-container expenses-page-wrapper">

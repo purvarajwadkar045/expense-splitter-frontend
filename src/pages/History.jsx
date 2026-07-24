@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { MdSearch, MdCloudDownload, MdReceipt, MdPayment, MdFilterList, MdDateRange, MdFileDownload } from 'react-icons/md';
+import { MdSearch, MdReceipt, MdPayment, MdDateRange, MdFileDownload } from 'react-icons/md';
 
 import EmptyState from '../components/ui/EmptyState';
 import Button from '../components/ui/Button';
+import Loader from '../components/ui/Loader';
 
 import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
@@ -19,6 +20,7 @@ const History = () => {
 
   const [groups, setGroups] = useState([]);
   const [unifiedHistory, setUnifiedHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,49 +29,57 @@ const History = () => {
   const [sortOrder, setSortOrder] = useState('newest'); // 'newest' | 'oldest'
 
   // Load data
-  const loadHistoryData = () => {
-    const fetchedGroups = groupService.getGroups();
-    const fetchedExpenses = expenseService.getExpenses();
-    const fetchedSettlements = settlementService.getSettlements();
+  const loadHistoryData = async () => {
+    setLoading(true);
+    try {
+      const fetchedGroups = groupService.getGroups();
+      const fetchedExpenses = await expenseService.getExpenses();
+      const fetchedSettlements = settlementService.getSettlements();
 
-    setGroups(fetchedGroups);
+      setGroups(fetchedGroups);
 
-    // Merge expenses and settlements
-    const historyList = [];
+      // Merge expenses and settlements
+      const historyList = [];
 
-    fetchedExpenses.forEach((e) => {
-      const g = fetchedGroups.find((grp) => grp.id === e.groupId);
-      historyList.push({
-        id: `e-${e.id}`,
-        type: 'expense',
-        title: e.title,
-        amount: e.amount,
-        paidBy: e.paidBy,
-        date: e.date,
-        category: e.category,
-        groupName: g ? g.name : 'Unknown Group',
-        groupId: e.groupId,
-        details: e.notes || 'No description'
+      fetchedExpenses.forEach((e) => {
+        const g = fetchedGroups.find((grp) => String(grp.id) === String(e.groupId));
+        historyList.push({
+          id: `e-${e.id}`,
+          type: 'expense',
+          title: e.title,
+          amount: e.amount,
+          paidBy: e.paidBy,
+          date: e.date,
+          category: e.category,
+          groupName: g ? g.name : 'Unknown Group',
+          groupId: e.groupId,
+          details: e.notes || 'No description'
+        });
       });
-    });
 
-    fetchedSettlements.forEach((s) => {
-      const g = fetchedGroups.find((grp) => grp.id === s.groupId);
-      historyList.push({
-        id: `s-${s.id}`,
-        type: 'settlement',
-        title: `${s.from} settled with ${s.to}`,
-        amount: s.amount,
-        paidBy: s.from,
-        date: s.date,
-        category: 'Settlement',
-        groupName: g ? g.name : 'Unknown Group',
-        groupId: s.groupId,
-        details: `Payment method: ${s.method}`
+      fetchedSettlements.forEach((s) => {
+        const g = fetchedGroups.find((grp) => String(grp.id) === String(s.groupId));
+        historyList.push({
+          id: `s-${s.id}`,
+          type: 'settlement',
+          title: `${s.from} settled with ${s.to}`,
+          amount: s.amount,
+          paidBy: s.from,
+          date: s.date,
+          category: 'Settlement',
+          groupName: g ? g.name : 'Unknown Group',
+          groupId: s.groupId,
+          details: `Payment method: ${s.method || 'Transfer'}`
+        });
       });
-    });
 
-    setUnifiedHistory(historyList);
+      setUnifiedHistory(historyList);
+    } catch (err) {
+      console.error('Failed to load transaction history:', err);
+      toast.error('Failed to load history data.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -82,7 +92,7 @@ const History = () => {
       const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             item.paidBy.toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesGroup = selectedGroup ? item.groupId === selectedGroup : true;
+      const matchesGroup = selectedGroup ? String(item.groupId) === String(selectedGroup) : true;
       const matchesType = selectedType === 'all' ? true : item.type === selectedType;
 
       return matchesSearch && matchesGroup && matchesType;
@@ -119,6 +129,22 @@ const History = () => {
     const cat = CATEGORIES.find(c => c.id === catId);
     return cat ? cat.color : '#10b981';
   };
+
+  if (loading) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-deep)'
+        }}
+      >
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="page-container history-page-wrapper">
@@ -242,7 +268,7 @@ const History = () => {
                         className="expense-amount" 
                         style={item.type === 'settlement' ? { color: 'var(--success)' } : {}}
                       >
-                        ₹{item.amount.toLocaleString()}
+                        ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </td>
 
