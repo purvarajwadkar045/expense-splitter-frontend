@@ -34,7 +34,7 @@ const History = () => {
     try {
       const fetchedGroups = groupService.getGroups();
       const fetchedExpenses = await expenseService.getExpenses();
-      const fetchedSettlements = settlementService.getSettlements();
+      const fetchedSettlements = await settlementService.getSettlements();
 
       setGroups(fetchedGroups);
 

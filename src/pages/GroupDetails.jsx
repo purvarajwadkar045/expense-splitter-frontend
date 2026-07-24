@@ -196,14 +196,22 @@ const GroupDetails = () => {
     }
   };
 
-  const handleRecordSettlement = (settleData) => {
-    settlementService.createSettlement({
-      groupId: id,
-      ...settleData
-    });
-    toast.success('Repayment settled!');
-    setIsSettleOpen(false);
-    loadGroupDetails();
+  const handleRecordSettlement = async (settleData) => {
+    setLoading(true);
+    try {
+      await settlementService.createSettlement({
+        groupId: id,
+        ...settleData
+      });
+      toast.success('Repayment settled!');
+      setIsSettleOpen(false);
+      await loadGroupDetails();
+    } catch (err) {
+      console.error('Failed to record settlement:', err);
+      toast.error(err.response?.data?.detail || 'Failed to submit settlement.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openEditModal = (expense) => {

@@ -64,25 +64,49 @@ const Dashboard = () => {
   }, []);
 
   // Modal Submit Handlers (refreshes dashboard metrics after actions)
-  const handleCreateGroup = (groupData) => {
-    groupService.createGroup(groupData.name, groupData.description, groupData.members);
-    toast.success('Group created successfully!');
-    setIsGroupOpen(false);
-    loadDashboardData();
+  const handleCreateGroup = async (groupData) => {
+    setLoadingData(true);
+    try {
+      await groupService.createGroup(groupData.name, groupData.description, groupData.members);
+      toast.success('Group created successfully!');
+      setIsGroupOpen(false);
+      await loadDashboardData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to create group.');
+    } finally {
+      setLoadingData(false);
+    }
   };
 
-  const handleAddExpense = (expenseData) => {
-    expenseService.createExpense(expenseData);
-    toast.success('Expense added successfully!');
-    setIsExpenseOpen(false);
-    loadDashboardData();
+  const handleAddExpense = async (expenseData) => {
+    setLoadingData(true);
+    try {
+      await expenseService.createExpense(expenseData);
+      toast.success('Expense added successfully!');
+      setIsExpenseOpen(false);
+      await loadDashboardData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to add expense.');
+    } finally {
+      setLoadingData(false);
+    }
   };
 
-  const handleSettleUp = (settleData) => {
-    settlementService.createSettlement(settleData);
-    toast.success('Payment recorded successfully!');
-    setIsSettleOpen(false);
-    loadDashboardData();
+  const handleSettleUp = async (settleData) => {
+    setLoadingData(true);
+    try {
+      await settlementService.createSettlement(settleData);
+      toast.success('Payment recorded successfully!');
+      setIsSettleOpen(false);
+      await loadDashboardData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Failed to record payment.');
+    } finally {
+      setLoadingData(false);
+    }
   };
 
   // Safe references to mock services fallback for empty states/lists if needed

@@ -29,12 +29,12 @@ const Groups = () => {
   const [editingGroup, setEditingGroup] = useState(null);
 
   // Load all groups and calculate dynamic balances
-  const loadGroupsData = () => {
+  const loadGroupsData = async () => {
     setLoading(true);
     try {
       const fetchedGroups = groupService.getGroups();
-      const allExpenses = expenseService.getExpenses();
-      const allSettlements = settlementService.getSettlements();
+      const allExpenses = await expenseService.getExpenses();
+      const allSettlements = await settlementService.getSettlements();
 
       const groupsWithBalances = fetchedGroups.map((g) => {
         const groupExpenses = allExpenses.filter((e) => String(e.groupId) === String(g.id));
@@ -108,8 +108,8 @@ const Groups = () => {
         await groupService.deleteGroup(id);
         
         // Clean up group expenses and settlements locally
-        const allExpenses = expenseService.getExpenses();
-        const allSettlements = settlementService.getSettlements();
+        const allExpenses = await expenseService.getExpenses();
+        const allSettlements = await settlementService.getSettlements();
         
         const filteredExpenses = allExpenses.filter(e => String(e.groupId) !== String(id));
         const filteredSettlements = allSettlements.filter(s => String(s.groupId) !== String(id));
