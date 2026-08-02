@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import VerifyOtp from './pages/VerifyOtp';
 
 // Protected Pages
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -34,6 +35,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-otp" element={<VerifyOtp />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>

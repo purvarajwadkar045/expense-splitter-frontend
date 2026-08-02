@@ -52,6 +52,21 @@ const authService = {
       new_password: newPassword
     });
     return response.data;
+  },
+
+  verifyOtp: async (email, otp) => {
+    const response = await API.post('/auth/verify-otp', {
+      email,
+      otp
+    });
+    return response.data;
+  },
+
+  resendOtp: async (email) => {
+    const response = await API.post('/auth/resend-otp', {
+      email
+    });
+    return response.data;
   }
 };
 

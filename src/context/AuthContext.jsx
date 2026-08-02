@@ -75,29 +75,8 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       await authService.register(userData);
-      showToast.success('Account created! Authenticating...');
-      
-      // Automatically log the user in using credentials
-      const loginData = await authService.login({
-        email: userData.email,
-        password: userData.password
-      });
-      const receivedToken = loginData.access_token;
-      localStorage.setItem('token', receivedToken);
-      setToken(receivedToken);
-
-      const userProfile = await authService.getCurrentUser();
-      const loggedUser = {
-        name: userProfile.username,
-        email: userProfile.email,
-        id: userProfile.id,
-        joinedDate: userProfile.created_at
-      };
-      localStorage.setItem('user', JSON.stringify(loggedUser));
-      setUser(loggedUser);
-      
-      showToast.success('Welcome! Account created and logged in.');
-      navigate('/dashboard');
+      showToast.success('Account created! Please verify your email with the OTP code sent.');
+      navigate('/verify-otp', { state: { email: userData.email } });
     } catch (error) {
       console.error('Registration failed:', error);
       const errorMsg = error.response?.data?.detail || 'Registration failed. Please try again.';
