@@ -32,7 +32,7 @@ const History = () => {
   const loadHistoryData = async () => {
     setLoading(true);
     try {
-      const fetchedGroups = groupService.getGroups();
+      const fetchedGroups = await groupService.getGroups();
       const fetchedExpenses = await expenseService.getExpenses();
       const fetchedSettlements = await settlementService.getSettlements();
 

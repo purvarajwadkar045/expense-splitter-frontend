@@ -27,6 +27,8 @@ import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
 import settlementService from '../services/settlementService';
 import useToast from '../hooks/useToast';
+import API from '../services/api';
+import notificationService from '../services/notificationService';
 
 import '../styles/dashboard.css';
 
@@ -43,6 +45,8 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loadingData, setLoadingData] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [debtsList, setDebtsList] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
 
   // Load dashboard data from FastAPI backend
   const loadDashboardData = async () => {
@@ -51,6 +55,35 @@ const Dashboard = () => {
     try {
       const data = await dashboardService.getDashboardData();
       setDashboardData(data);
+
+      const groupsList = await groupService.getGroups();
+      const allDebts = [];
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      const currentUserName = currentUser ? currentUser.name : '';
+
+      const promises = groupsList.map(async (g) => {
+        try {
+          const res = await API.get(`/groups/${g.id}/simplify`);
+          const groupSimplified = res.data.map(s => {
+            const from = s.from_username === currentUserName ? 'You' : s.from_username;
+            const to = s.to_username === currentUserName ? 'You' : s.to_username;
+            return {
+              from,
+              to,
+              amount: s.amount
+            };
+          });
+          allDebts.push(...groupSimplified);
+        } catch (err) {
+          console.warn(`Failed to fetch simplify for group ${g.id}:`, err);
+        }
+      });
+      await Promise.all(promises);
+      const userDebts = allDebts.filter(d => d.from === 'You' || d.to === 'You');
+      setDebtsList(userDebts);
+
+      const notifications = await notificationService.getNotifications();
+      setRecentActivities(notifications.slice(0, 5));
     } catch (err) {
       console.error('Error fetching dashboard metrics:', err);
       setErrorMsg(err.response?.data?.detail || 'Failed to fetch dashboard data from server.');
@@ -239,7 +272,7 @@ const Dashboard = () => {
           {/* Recent Activity Feed Guidance */}
           <div className="recent-activity-box glass-card">
             <h3 className="section-title">Recent Activity Feed</h3>
-            <RecentActivity activities={emptyList} />
+            <RecentActivity activities={recentActivities} />
           </div>
         </div>
 
@@ -259,7 +292,7 @@ const Dashboard = () => {
           {/* Balance Summaries Panel */}
           <div className="summary-section-box glass-card">
             <h3 className="section-title">Balances Summary</h3>
-            <BalanceSummary debts={emptyList} />
+            <BalanceSummary debts={debtsList} />
           </div>
         </div>
       </main>

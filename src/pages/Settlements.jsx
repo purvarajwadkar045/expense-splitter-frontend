@@ -35,7 +35,7 @@ const Settlements = () => {
   const loadSettlementsData = async () => {
     setLoading(true);
     try {
-      const fetchedGroups = groupService.getGroups();
+      const fetchedGroups = await groupService.getGroups();
       const fetchedSettlements = await settlementService.getSettlements();
 
       setGroups(fetchedGroups);

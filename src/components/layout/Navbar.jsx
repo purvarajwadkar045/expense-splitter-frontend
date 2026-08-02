@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdMenu, MdNotifications, MdAccountCircle, MdLogout, MdSearch, MdDarkMode, MdLightMode } from 'react-icons/md';
 import { useAuth } from '../../hooks/useAuth';
-import { INITIAL_NOTIFICATIONS } from '../../utils/constants';
+import notificationService from '../../services/notificationService';
 
 const Navbar = ({ toggleSidebar, onSearch }) => {
   const { user, logout } = useAuth();
@@ -17,13 +17,13 @@ const Navbar = ({ toggleSidebar, onSearch }) => {
   // Notifications dynamically synced
   const [notifications, setNotifications] = useState([]);
 
-  const loadNotifications = () => {
-    const stored = localStorage.getItem('notifications');
-    if (!stored) {
-      localStorage.setItem('notifications', JSON.stringify(INITIAL_NOTIFICATIONS));
-      setNotifications(INITIAL_NOTIFICATIONS);
-    } else {
-      setNotifications(JSON.parse(stored));
+  const loadNotifications = async () => {
+    try {
+      const list = await notificationService.getNotifications();
+      // Only keep the most recent 5 for dropdown preview
+      setNotifications(list);
+    } catch (err) {
+      console.warn('Failed to load notifications in Navbar:', err);
     }
   };
 
@@ -35,12 +35,6 @@ const Navbar = ({ toggleSidebar, onSearch }) => {
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
-
-  const saveNotifications = (updatedList) => {
-    localStorage.setItem('notifications', JSON.stringify(updatedList));
-    setNotifications(updatedList);
-    window.dispatchEvent(new Event('storage'));
-  };
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
@@ -66,9 +60,14 @@ const Navbar = ({ toggleSidebar, onSearch }) => {
     }
   };
 
-  const markAllRead = () => {
-    const updated = notifications.map(n => ({ ...n, unread: false }));
-    saveNotifications(updated);
+  const markAllRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      loadNotifications();
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      console.error('Failed to mark all as read:', err);
+    }
   };
 
   return (

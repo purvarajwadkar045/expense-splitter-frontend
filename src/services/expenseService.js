@@ -1,10 +1,11 @@
 import API from './api';
 import groupService from './groupService';
 
-const mapBackendExpenseToFrontend = (exp, groupId, currentUserName) => {
+const mapBackendExpenseToFrontend = (exp, groupId, currentUserName, groupName = '') => {
   return {
     id: exp.id,
     groupId: String(groupId || exp.group_id),
+    groupName: groupName,
     title: exp.title,
     amount: Number(exp.amount),
     paidBy: exp.paid_by === currentUserName ? 'You' : exp.paid_by,
@@ -22,30 +23,52 @@ const expenseService = {
     const currentUserName = currentUser ? currentUser.name : '';
 
     if (groupId) {
+      let groupName = '';
+      try {
+        const g = await groupService.getGroupById(groupId);
+        groupName = g ? g.name : '';
+      } catch (err) {
+        console.warn(`Failed to fetch group details for group ${groupId}:`, err);
+      }
       const response = await API.get(`/groups/${groupId}/expenses`);
-      return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName));
+      return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName, groupName));
     } else {
-      const groups = groupService.getGroups();
-      const allExpenses = [];
-      const promises = groups.map(async (g) => {
-        try {
-          const response = await API.get(`/groups/${g.id}/expenses`);
-          const mapped = response.data.map(exp => mapBackendExpenseToFrontend(exp, g.id, currentUserName));
-          allExpenses.push(...mapped);
-        } catch (err) {
-          console.warn(`Failed to fetch expenses for group ${g.id}:`, err);
+      try {
+        const groups = await groupService.getGroups();
+        if (!Array.isArray(groups) || groups.length === 0) {
+          return [];
         }
-      });
-      await Promise.all(promises);
-      return allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const allExpenses = [];
+        const promises = groups.map(async (g) => {
+          try {
+            const response = await API.get(`/groups/${g.id}/expenses`);
+            const mapped = response.data.map(exp => mapBackendExpenseToFrontend(exp, g.id, currentUserName, g.name));
+            allExpenses.push(...mapped);
+          } catch (err) {
+            console.warn(`Failed to fetch expenses for group ${g.id}:`, err);
+          }
+        });
+        await Promise.all(promises);
+        return allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      } catch (error) {
+        console.error('Failed to fetch groups for expenses:', error);
+        return [];
+      }
     }
   },
 
   getExpensesByGroupId: async (groupId) => {
     const currentUser = JSON.parse(localStorage.getItem('user'));
     const currentUserName = currentUser ? currentUser.name : '';
+    let groupName = '';
+    try {
+      const g = await groupService.getGroupById(groupId);
+      groupName = g ? g.name : '';
+    } catch (err) {
+      console.warn(`Failed to fetch group details for group ${groupId}:`, err);
+    }
     const response = await API.get(`/groups/${groupId}/expenses`);
-    return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName));
+    return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName, groupName));
   },
 
   createExpense: async (expenseData) => {
@@ -76,9 +99,10 @@ const expenseService = {
       }
 
       // If no custom splits, use all group members
+      const groupData = await groupService.getGroupById(groupId);
       const participantNames = Object.keys(expenseData.shares || {}).length > 0 
         ? Object.keys(expenseData.shares) 
-        : (groupService.getGroupById(groupId)?.members || []);
+        : (groupData?.members || []);
 
       const participants = [];
       participantNames.forEach(name => {
@@ -125,9 +149,10 @@ const expenseService = {
         memberMap[currentUser.name.toLowerCase()] = currentUser.id;
       }
 
+      const groupData = await groupService.getGroupById(groupId);
       const participantNames = Object.keys(expenseData.shares || {}).length > 0 
         ? Object.keys(expenseData.shares) 
-        : (groupService.getGroupById(groupId)?.members || []);
+        : (groupData?.members || []);
 
       participants = [];
       participantNames.forEach(name => {

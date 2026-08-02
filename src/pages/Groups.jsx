@@ -32,7 +32,7 @@ const Groups = () => {
   const loadGroupsData = async () => {
     setLoading(true);
     try {
-      const fetchedGroups = groupService.getGroups();
+      const fetchedGroups = await groupService.getGroups();
       const allExpenses = await expenseService.getExpenses();
       const allSettlements = await settlementService.getSettlements();
 

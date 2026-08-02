@@ -35,7 +35,7 @@ const Expenses = () => {
     setLoading(true);
     try {
       const fetchedExpenses = await expenseService.getExpenses();
-      const fetchedGroups = groupService.getGroups();
+      const fetchedGroups = await groupService.getGroups();
       
       setExpenses(fetchedExpenses);
       setGroups(fetchedGroups);

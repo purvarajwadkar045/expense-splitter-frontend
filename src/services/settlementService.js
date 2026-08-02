@@ -1,7 +1,7 @@
 import API from './api';
 import groupService from './groupService';
 
-const mapBackendSettlementToFrontend = (settlement, groupId, membersList, currentUserName) => {
+const mapBackendSettlementToFrontend = (settlement, groupId, membersList, currentUserName, groupName = '') => {
   const memberMap = {};
   membersList.forEach(m => {
     memberMap[m.user_id] = m.username;
@@ -13,6 +13,7 @@ const mapBackendSettlementToFrontend = (settlement, groupId, membersList, curren
   return {
     id: settlement.id,
     groupId: String(groupId || settlement.group_id),
+    groupName: groupName,
     from: fromUser === currentUserName ? 'You' : fromUser,
     to: toUser === currentUserName ? 'You' : toUser,
     amount: Number(settlement.amount),
@@ -23,25 +24,33 @@ const mapBackendSettlementToFrontend = (settlement, groupId, membersList, curren
 
 const settlementService = {
   getSettlements: async () => {
-    const groups = groupService.getGroups();
-    const allSettlements = [];
-    const currentUser = JSON.parse(localStorage.getItem('user'));
-    const currentUserName = currentUser ? currentUser.name : '';
-
-    const promises = groups.map(async (g) => {
-      try {
-        const balanceRes = await API.get(`/groups/${g.id}/balances`);
-        const response = await API.get(`/groups/${g.id}/settlements`);
-        const mapped = response.data.map(s => 
-          mapBackendSettlementToFrontend(s, g.id, balanceRes.data, currentUserName)
-        );
-        allSettlements.push(...mapped);
-      } catch (err) {
-        console.warn(`Failed to fetch settlements for group ${g.id}:`, err);
+    try {
+      const groups = await groupService.getGroups();
+      if (!Array.isArray(groups) || groups.length === 0) {
+        return [];
       }
-    });
-    await Promise.all(promises);
-    return allSettlements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const allSettlements = [];
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      const currentUserName = currentUser ? currentUser.name : '';
+
+      const promises = groups.map(async (g) => {
+        try {
+          const balanceRes = await API.get(`/groups/${g.id}/balances`);
+          const response = await API.get(`/groups/${g.id}/settlements`);
+          const mapped = response.data.map(s => 
+            mapBackendSettlementToFrontend(s, g.id, balanceRes.data, currentUserName, g.name)
+          );
+          allSettlements.push(...mapped);
+        } catch (err) {
+          console.warn(`Failed to fetch settlements for group ${g.id}:`, err);
+        }
+      });
+      await Promise.all(promises);
+      return allSettlements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    } catch (error) {
+      console.error('Failed to fetch groups for settlements:', error);
+      return [];
+    }
   },
 
   getSettlementsByGroupId: async (groupId) => {
@@ -49,9 +58,16 @@ const settlementService = {
     const response = await API.get(`/groups/${groupId}/settlements`);
     const currentUser = JSON.parse(localStorage.getItem('user'));
     const currentUserName = currentUser ? currentUser.name : '';
+    let groupName = '';
+    try {
+      const g = await groupService.getGroupById(groupId);
+      groupName = g ? g.name : '';
+    } catch (err) {
+      console.warn(`Failed to fetch group details for group ${groupId}:`, err);
+    }
 
     return response.data.map(s => 
-      mapBackendSettlementToFrontend(s, groupId, balanceRes.data, currentUserName)
+      mapBackendSettlementToFrontend(s, groupId, balanceRes.data, currentUserName, groupName)
     );
   },
 

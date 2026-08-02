@@ -51,7 +51,7 @@ const GroupDetails = () => {
   const loadGroupDetails = async () => {
     setLoading(true);
     try {
-      const g = groupService.getGroupById(id);
+      const g = await groupService.getGroupById(id);
       if (!g) {
         toast.error('Group not found');
         navigate('/groups');
@@ -60,7 +60,7 @@ const GroupDetails = () => {
       setGroup(g);
 
       const groupExpenses = await expenseService.getExpensesByGroupId(id);
-      const groupSettlements = settlementService.getSettlementsByGroupId(id);
+      const groupSettlements = await settlementService.getSettlementsByGroupId(id);
 
       setExpenses(groupExpenses);
       setSettlements(groupSettlements);
@@ -141,13 +141,6 @@ const GroupDetails = () => {
       setLoading(true);
       try {
         await groupService.deleteGroup(id);
-        
-        // Purge matching expenses/settlements locally
-        const allExpenses = expenseService.getExpenses();
-        const allSettlements = settlementService.getSettlements();
-        localStorage.setItem('expenses', JSON.stringify(allExpenses.filter(e => String(e.groupId) !== String(id))));
-        localStorage.setItem('settlements', JSON.stringify(allSettlements.filter(s => String(s.groupId) !== String(id))));
-        
         toast.success('Group deleted successfully');
         navigate('/groups');
       } catch (err) {

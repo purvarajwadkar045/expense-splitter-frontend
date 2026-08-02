@@ -4,7 +4,7 @@ import { MdNotifications, MdCheck, MdDelete, MdReceipt, MdPayment, MdGroupAdd } 
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 
-import { INITIAL_NOTIFICATIONS } from '../utils/constants';
+import notificationService from '../services/notificationService';
 import useToast from '../hooks/useToast';
 
 import '../styles/notifications.css';
@@ -13,14 +13,13 @@ const Notifications = () => {
   const toast = useToast();
   const [notifications, setNotifications] = useState([]);
 
-  // Load from localStorage
-  const loadNotifications = () => {
-    const stored = localStorage.getItem('notifications');
-    if (!stored) {
-      localStorage.setItem('notifications', JSON.stringify(INITIAL_NOTIFICATIONS));
-      setNotifications(INITIAL_NOTIFICATIONS);
-    } else {
-      setNotifications(JSON.parse(stored));
+  // Load from backend
+  const loadNotifications = async () => {
+    try {
+      const list = await notificationService.getNotifications();
+      setNotifications(list);
+    } catch (err) {
+      console.warn("Failed to load notifications:", err);
     }
   };
 
@@ -35,38 +34,51 @@ const Notifications = () => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  const saveNotifications = (updatedList) => {
-    localStorage.setItem('notifications', JSON.stringify(updatedList));
-    setNotifications(updatedList);
-    // Dispatch custom event to notify Navbar dropdown to re-sync
-    window.dispatchEvent(new Event('storage'));
-  };
-
-  const markAllAsRead = () => {
-    const updated = notifications.map((n) => ({ ...n, unread: false }));
-    saveNotifications(updated);
-    toast.success('All notifications marked as read.');
-  };
-
-  const clearAllNotifications = () => {
-    if (window.confirm('Are you sure you want to clear all notifications?')) {
-      saveNotifications([]);
-      toast.success('Notifications cleared.');
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      await loadNotifications();
+      window.dispatchEvent(new Event('storage'));
+      toast.success('All notifications marked as read.');
+    } catch (err) {
+      toast.error('Failed to mark notifications as read.');
     }
   };
 
-  const markAsRead = (id) => {
-    const updated = notifications.map((n) => 
-      n.id === id ? { ...n, unread: false } : n
-    );
-    saveNotifications(updated);
+  const clearAllNotifications = async () => {
+    if (window.confirm('Are you sure you want to clear all notifications?')) {
+      try {
+        const promises = notifications.map(n => notificationService.deleteNotification(n.id));
+        await Promise.all(promises);
+        await loadNotifications();
+        window.dispatchEvent(new Event('storage'));
+        toast.success('Notifications cleared.');
+      } catch (err) {
+        toast.error('Failed to clear notifications.');
+      }
+    }
   };
 
-  const deleteNotification = (id, e) => {
+  const markAsRead = async (id) => {
+    try {
+      await notificationService.markAsRead(id);
+      await loadNotifications();
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      console.warn("Failed to mark notification as read:", err);
+    }
+  };
+
+  const deleteNotification = async (id, e) => {
     e.stopPropagation();
-    const updated = notifications.filter((n) => n.id !== id);
-    saveNotifications(updated);
-    toast.success('Notification removed.');
+    try {
+      await notificationService.deleteNotification(id);
+      await loadNotifications();
+      window.dispatchEvent(new Event('storage'));
+      toast.success('Notification removed.');
+    } catch (err) {
+      toast.error('Failed to remove notification.');
+    }
   };
 
   const getIcon = (type) => {

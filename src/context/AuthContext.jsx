@@ -110,8 +110,13 @@ export const AuthProvider = ({ children }) => {
   const forgotPassword = async (email) => {
     setLoading(true);
     try {
-      showToast.success('OTP security code sent! (Local Sandbox Mode)');
+      await authService.forgotPassword(email);
+      showToast.success('OTP security code sent!');
       navigate('/reset-password', { state: { email } });
+    } catch (error) {
+      console.error(error);
+      const errorMsg = error.response?.data?.detail || 'Failed to send OTP code. Try again.';
+      showToast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -120,8 +125,13 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = async (email, code, newPassword) => {
     setLoading(true);
     try {
-      showToast.success('Password updated successfully! (Local Sandbox Mode)');
+      await authService.resetPassword(email, code, newPassword);
+      showToast.success('Password updated successfully!');
       navigate('/login');
+    } catch (error) {
+      console.error(error);
+      const errorMsg = error.response?.data?.detail || 'Invalid or expired code.';
+      showToast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -130,13 +140,31 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = async (name) => {
     setLoading(true);
     try {
+      const responseData = await authService.updateProfile(name);
       const localUser = JSON.parse(localStorage.getItem('user')) || {};
-      localUser.name = name;
+      localUser.name = responseData.username;
       localStorage.setItem('user', JSON.stringify(localUser));
       setUser(localUser);
-      showToast.success('Profile details saved! (Local Sandbox Mode)');
+      showToast.success('Profile details saved!');
     } catch (error) {
+      console.error(error);
       showToast.error('Failed to save profile changes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    setLoading(true);
+    try {
+      await authService.changePassword(currentPassword, newPassword);
+      showToast.success('Password updated successfully!');
+      return true;
+    } catch (error) {
+      console.error(error);
+      const errorMsg = error.response?.data?.detail || 'Failed to update password.';
+      showToast.error(errorMsg);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -162,6 +190,7 @@ export const AuthProvider = ({ children }) => {
         forgotPassword,
         resetPassword,
         updateProfile,
+        changePassword,
         logout
       }}
     >

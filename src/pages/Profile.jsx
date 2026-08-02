@@ -30,7 +30,7 @@ const passwordSchema = yup.object().shape({
 });
 
 const Profile = () => {
-  const { user, updateProfile, loading } = useAuth();
+  const { user, updateProfile, changePassword, loading } = useAuth();
   const toast = useToast();
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -65,9 +65,12 @@ const Profile = () => {
   };
 
   const onPasswordSubmit = async (data) => {
-    // Simulated change password
-    toast.success('Password changed successfully!');
-    resetPasswordForm();
+    try {
+      await changePassword(data.currentPassword, data.newPassword);
+      resetPasswordForm();
+    } catch (err) {
+      // Error message is already displayed inside the context/toast
+    }
   };
 
   // Convert ISO date to readable string
