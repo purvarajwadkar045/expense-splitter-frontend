@@ -79,8 +79,21 @@ export const AuthProvider = ({ children }) => {
       navigate('/verify-otp', { state: { email: userData.email } });
     } catch (error) {
       console.error('Registration failed:', error);
-      const errorMsg = error.response?.data?.detail || 'Registration failed. Please try again.';
-      showToast.error(errorMsg);
+
+      // Do not expose raw backend payloads directly to the user.
+      const detail = error.response?.data?.detail;
+
+      // Backend uses exact message "Email already exists" when an account already exists
+      if (detail === 'Email already exists') {
+        // Do NOT auto-resend. Route the user to verification page and show a helpful message.
+        showToast.info(
+          'An account with this email already exists. If you have not verified your email yet, you can enter the code or request a new code on the verification page.'
+        );
+        navigate('/verify-otp', { state: { email: userData.email, existing: true } });
+      } else {
+        const errorMsg = detail || 'Registration failed. Please try again.';
+        showToast.error(errorMsg);
+      }
     } finally {
       setLoading(false);
     }

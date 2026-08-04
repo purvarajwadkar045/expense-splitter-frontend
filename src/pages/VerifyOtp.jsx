@@ -85,6 +85,11 @@ const VerifyOtp = () => {
         <div className="auth-header">
           <h1 className="auth-title">Verify Account</h1>
           <p className="auth-subtitle">Enter the 6-digit code sent to your email address</p>
+          {location.state?.existing && (
+            <div className="existing-account-note" style={{ marginTop: '8px', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+              An account already exists for this email. If you have not completed verification, enter the code here or use "Resend OTP Code" to request a new code.
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleVerify} className="auth-form">
