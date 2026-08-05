@@ -100,8 +100,13 @@ const Dashboard = () => {
   const handleCreateGroup = async (groupData) => {
     setLoadingData(true);
     try {
-      await groupService.createGroup(groupData.name, groupData.description, groupData.members);
-      toast.success('Group created successfully!');
+      const res = await groupService.createGroup(groupData.name, groupData.description, groupData.members);
+      if (res.failedMembers && res.failedMembers.length > 0) {
+        const names = res.failedMembers.map(f => `${f.member} (${f.reason})`).join(', ');
+        toast.warning(`Group created but some members were not added: ${names}`);
+      } else {
+        toast.success('Group created successfully!');
+      }
       setIsGroupOpen(false);
       await loadDashboardData();
     } catch (err) {

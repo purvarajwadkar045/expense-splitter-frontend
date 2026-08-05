@@ -70,6 +70,8 @@ const GroupDetails = () => {
       const simplifyRes = await API.get(`/groups/${id}/simplify`);
       const currentUser = JSON.parse(localStorage.getItem('user'));
       const currentUserName = currentUser ? currentUser.name : '';
+      const currentUserId = currentUser ? currentUser.id : null;
+      const isCreator = group ? (group.created_by === currentUserId) : false;
 
       // Map balances
       const netBalances = {};
@@ -149,6 +151,21 @@ const GroupDetails = () => {
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!window.confirm(`Remove ${member} from the group?`)) return;
+    setLoading(true);
+    try {
+      await groupService.removeMember(id, member);
+      toast.success(`${member} removed from group`);
+      await loadGroupDetails();
+    } catch (err) {
+      console.error('Remove member failed:', err);
+      toast.error(err.response?.data?.detail || 'Failed to remove member.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -345,16 +362,28 @@ const GroupDetails = () => {
                       </div>
                       <span className="standing-username">{member}</span>
                     </div>
-                    <span 
-                      className={`standing-amount-label ${bal > 0.5 ? 'owed' : bal < -0.5 ? 'owe' : 'settled'}`}
-                    >
-                      {bal > 0.5 
-                        ? `+₹${bal.toFixed(1)}` 
-                        : bal < -0.5 
-                        ? `-₹${Math.abs(bal).toFixed(1)}` 
-                        : 'Settled'
-                      }
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span 
+                        className={`standing-amount-label ${bal > 0.5 ? 'owed' : bal < -0.5 ? 'owe' : 'settled'}`}
+                      >
+                        {bal > 0.5 
+                          ? `+₹${bal.toFixed(1)}` 
+                          : bal < -0.5 
+                          ? `-₹${Math.abs(bal).toFixed(1)}` 
+                          : 'Settled'
+                        }
+                      </span>
+                      {isCreator && member !== 'You' && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(member)}
+                          className="btn btn-link"
+                          style={{ color: 'var(--danger)', fontSize: '0.8rem' }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

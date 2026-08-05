@@ -1,18 +1,19 @@
 /* Group listing stylesheet */
-.group-grid {
+/* Responsive grid used by Groups.jsx (class: groups-card-grid) */
+.groups-card-grid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 24px;
 }
 
 @media (min-width: 640px) {
-  .group-grid {
+  .groups-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1024px) {
-  .group-grid {
+  .groups-card-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
@@ -21,24 +22,33 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 200px;
+  min-height: 160px;
   cursor: pointer;
   position: relative;
+  padding: 18px;
+  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
 }
 
 .group-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .group-card-title {
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--text-pure);
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 110px);
 }
 
 .group-member-count {
@@ -59,8 +69,10 @@
   font-size: 0.875rem;
   color: var(--text-muted);
   line-height: 1.4;
-  margin-bottom: 20px;
-  flex: 1;
+  margin-bottom: 12px;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  max-height: 3.6rem;
 }
 
 .group-card-footer {
@@ -68,8 +80,10 @@
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--glass-border);
-  padding-top: 16px;
+  padding-top: 12px;
   margin-top: auto;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .group-card-balance {
@@ -303,6 +317,7 @@
 .group-footer-col {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .group-footer-col.right {
@@ -320,10 +335,13 @@
 
 .group-total-spent-amount {
   font-family: var(--font-main);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--text-pure);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Group Details Page Classes */

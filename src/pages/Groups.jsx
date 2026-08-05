@@ -85,11 +85,22 @@ const Groups = () => {
     setLoading(true);
     try {
       if (editingGroup) {
-        await groupService.updateGroup(editingGroup.id, data);
-        toast.success('Group updated successfully');
+        const res = await groupService.updateGroup(editingGroup.id, data);
+        // If there were failed members, inform the user.
+        if (res.failedMembers && res.failedMembers.length > 0) {
+          const names = res.failedMembers.map(f => `${f.member} (${f.reason})`).join(', ');
+          toast.warning(`Group updated but some members were not added: ${names}`);
+        } else {
+          toast.success('Group updated successfully');
+        }
       } else {
-        await groupService.createGroup(data.name, data.description, data.members);
-        toast.success('Group created successfully');
+        const res = await groupService.createGroup(data.name, data.description, data.members);
+        if (res.failedMembers && res.failedMembers.length > 0) {
+          const names = res.failedMembers.map(f => `${f.member} (${f.reason})`).join(', ');
+          toast.warning(`Group created but some members were not added: ${names}`);
+        } else {
+          toast.success('Group created successfully');
+        }
       }
       setIsModalOpen(false);
       loadGroupsData();
@@ -107,16 +118,7 @@ const Groups = () => {
       try {
         await groupService.deleteGroup(id);
         
-        // Clean up group expenses and settlements locally
-        const allExpenses = await expenseService.getExpenses();
-        const allSettlements = await settlementService.getSettlements();
-        
-        const filteredExpenses = allExpenses.filter(e => String(e.groupId) !== String(id));
-        const filteredSettlements = allSettlements.filter(s => String(s.groupId) !== String(id));
-        
-        localStorage.setItem('expenses', JSON.stringify(filteredExpenses));
-        localStorage.setItem('settlements', JSON.stringify(filteredSettlements));
-
+        // Refresh lists after successful delete (no localStorage mock cleanup needed)
         toast.success('Group deleted successfully');
         loadGroupsData();
       } catch (err) {

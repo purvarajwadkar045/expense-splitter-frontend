@@ -1,19 +1,23 @@
 import API from './api';
 
 const getEmailForName = (name) => {
-  const lower = name.toLowerCase().trim();
-  if (lower.includes('@')) return name;
-  const mapping = {
-    'sakshi': 'sakshi12@gmail.com',
-    'rahul': 'rahul@gmail.com',
-    'priya': 'priya@gmail.com',
-    'aman': 'aman@gmail.com',
-    'neha': 'neha@gmail.com',
-    'vikram': 'vikram@gmail.com',
-    'shreya': 'shreya@gmail.com',
-    'amit': 'amit@gmail.com'
-  };
-  return mapping[lower] || `${lower}@gmail.com`;
+  // Accept explicit emails only. Do not fabricate or fallback to fake emails.
+  if (!name) return null;
+  const trimmed = String(name).trim();
+  if (trimmed.includes('@')) return trimmed;
+  // Non-email inputs are considered display names and must be resolved by the caller.
+  return null;
+};
+
+const safeFormatDate = (val) => {
+  try {
+    if (!val) return null;
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().split('T')[0];
+  } catch (e) {
+    return null;
+  }
 };
 
 const groupService = {
@@ -33,30 +37,39 @@ const groupService = {
       description
     });
     
-    const createdGroup = response.data;
+      const createdGroup = response.data;
     const groupId = createdGroup.id;
 
     const addedMembers = [];
-    for (const member of members) {
-      if (member === 'You') continue;
-      const email = getEmailForName(member);
-      try {
-        await API.post(`/groups/${groupId}/members`, { email });
-        addedMembers.push(member);
-      } catch (err) {
-        console.warn(`Failed to add member ${member} (${email}) to backend:`, err);
-        addedMembers.push(member);
+      const failedMembers = [];
+      for (const member of members) {
+        if (member === 'You') continue;
+        const email = getEmailForName(member);
+        if (!email) {
+          // member input was not an email — record as failed and continue
+          failedMembers.push({ member, reason: 'Invalid email format' });
+          continue;
+        }
+        try {
+          await API.post(`/groups/${groupId}/members`, { email });
+          addedMembers.push(member);
+        } catch (err) {
+          // Record the failure so the caller can inform the user; do NOT optimistic-add.
+          failedMembers.push({ member, reason: err.response?.data?.detail || 'Failed to add member' });
+        }
       }
-    }
 
-    return {
-      id: String(groupId),
-      name: createdGroup.name,
-      description: createdGroup.description || '',
-      members: ['You', ...addedMembers],
-      createdDate: new Date(createdGroup.created_at).toISOString().split('T')[0],
-      totalExpenses: 0
-    };
+      const result = {
+        id: String(groupId),
+        name: createdGroup.name,
+        description: createdGroup.description || '',
+        members: ['You', ...addedMembers],
+        createdDate: safeFormatDate(createdGroup.created_at),
+        totalExpenses: 0,
+        failedMembers // array of { member, reason }
+      };
+
+      return result;
   },
 
   updateGroup: async (id, groupData) => {
@@ -68,16 +81,21 @@ const groupService = {
     const updatedGroup = response.data;
     const newMembers = groupData.members || [];
     const addedMembers = [];
+    const failedMembers = [];
     
     for (const member of newMembers) {
       if (member === 'You') continue;
       const email = getEmailForName(member);
+      if (!email) {
+        failedMembers.push({ member, reason: 'Invalid email format' });
+        continue;
+      }
       try {
         await API.post(`/groups/${id}/members`, { email });
+        addedMembers.push(member);
       } catch (err) {
-        console.warn(`Failed to add member ${member} to backend:`, err);
+        failedMembers.push({ member, reason: err.response?.data?.detail || 'Failed to add member' });
       }
-      addedMembers.push(member);
     }
 
     return {
@@ -85,8 +103,9 @@ const groupService = {
       name: updatedGroup.name,
       description: updatedGroup.description || '',
       members: ['You', ...addedMembers],
-      createdDate: new Date(updatedGroup.created_at).toISOString().split('T')[0],
-      totalExpenses: 0
+      createdDate: safeFormatDate(updatedGroup.created_at),
+      totalExpenses: 0,
+      failedMembers
     };
   },
 
@@ -94,9 +113,15 @@ const groupService = {
     const response = await API.delete(`/groups/${id}`);
     return response.data;
   },
-
+  
   addMember: async (groupId, email) => {
     const response = await API.post(`/groups/${groupId}/members`, { email });
+    return response.data;
+  },
+  
+  removeMember: async (groupId, username) => {
+    // DELETE with body is used to identify the member by username
+    const response = await API.delete(`/groups/${groupId}/members`, { data: { username } });
     return response.data;
   }
 };
