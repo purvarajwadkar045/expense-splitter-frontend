@@ -25,12 +25,14 @@ const Groups = () => {
 
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
 
   // Load all groups and calculate dynamic balances
   const loadGroupsData = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const fetchedGroups = await groupService.getGroups();
       const allExpenses = await expenseService.getExpenses();
@@ -61,6 +63,7 @@ const Groups = () => {
       setGroups(groupsWithBalances);
     } catch (err) {
       console.error('Failed to load groups data:', err);
+      setLoadError(true);
       toast.error('Failed to load groups data.');
     } finally {
       setLoading(false);
@@ -118,7 +121,6 @@ const Groups = () => {
       try {
         await groupService.deleteGroup(id);
         
-        // Refresh lists after successful delete (no localStorage mock cleanup needed)
         toast.success('Group deleted successfully');
         loadGroupsData();
       } catch (err) {
@@ -158,7 +160,13 @@ const Groups = () => {
         </Button>
       </header>
 
-      {groups.length === 0 ? (
+      {loadError ? (
+        <div className="empty-state" role="alert">
+          <h3>Unable to Load Groups</h3>
+          <p>Check your connection and try again.</p>
+          <Button onClick={loadGroupsData} variant="secondary">Retry</Button>
+        </div>
+      ) : groups.length === 0 ? (
         <EmptyState 
           title="No Groups Found"
           description="Create your first sharing group to start splitting rent, dining, or vacation bills!"

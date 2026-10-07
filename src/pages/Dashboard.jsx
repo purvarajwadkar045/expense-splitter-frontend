@@ -147,10 +147,6 @@ const Dashboard = () => {
     }
   };
 
-  // Safe references to mock services fallback for empty states/lists if needed
-  // (Preserves original components layouts without hardcoding values)
-  const emptyList = [];
-
   if (loadingData) {
     return (
       <div 

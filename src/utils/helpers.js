@@ -25,7 +25,8 @@ export const calculateSimplifiedDebts = (members, expenses = [], settlements = [
   // 1. Initialize net balance tracker for each user
   const netBalances = {};
   members.forEach(member => {
-    netBalances[member] = 0;
+    const displayName = getMemberDisplayName(member);
+    netBalances[displayName] = 0;
   });
 
   // 2. Add shares paid vs owed from expenses
@@ -119,6 +120,25 @@ export const calculateSimplifiedDebts = (members, expenses = [], settlements = [
     netBalances,
     simplifiedPayments
   };
+};
+
+export const getMemberId = (member) => {
+  if (member && typeof member === 'object') {
+    return member.id;
+  }
+  return member;
+};
+
+export const getMemberDisplayName = (member) => {
+  if (member && typeof member === 'object') {
+    return member.name || member.username || String(member.id || '');
+  }
+  return member;
+};
+
+export const getMemberKey = (member) => {
+  const id = getMemberId(member);
+  return id !== undefined && id !== null ? String(id) : String(getMemberDisplayName(member));
 };
 
 /**

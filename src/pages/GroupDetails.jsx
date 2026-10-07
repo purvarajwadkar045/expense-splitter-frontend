@@ -20,7 +20,7 @@ import SettlementHistory from '../components/settlements/SettlementHistory';
 import groupService from '../services/groupService';
 import expenseService from '../services/expenseService';
 import settlementService from '../services/settlementService';
-import { calculateSimplifiedDebts } from '../utils/helpers';
+import { calculateSimplifiedDebts, getMemberDisplayName, getMemberKey } from '../utils/helpers';
 import useToast from '../hooks/useToast';
 import API from '../services/api';
 
@@ -57,6 +57,8 @@ const GroupDetails = () => {
         navigate('/groups');
         return;
       }
+      // Attach basic group info first
+      // We'll augment `members` below after fetching balances to include user IDs
       setGroup(g);
 
       const groupExpenses = await expenseService.getExpensesByGroupId(id);
@@ -71,7 +73,17 @@ const GroupDetails = () => {
       const currentUser = JSON.parse(localStorage.getItem('user'));
       const currentUserName = currentUser ? currentUser.name : '';
       const currentUserId = currentUser ? currentUser.id : null;
-      const isCreator = group ? (group.created_by === currentUserId) : false;
+      const isCreator = g ? (g.created_by === currentUserId) : false;
+
+      // Build members list with IDs and display names from balances
+      const membersList = balanceRes.data.map(b => ({
+        id: b.user_id,
+        username: b.username,
+        name: b.username === currentUserName ? 'You' : b.username
+      }));
+
+      // Update group to include members array usable by ExpenseForm and other components
+      setGroup({ ...g, members: membersList, createdDate: g.created_at ? g.created_at.split('T')[0] : null });
 
       // Map balances
       const netBalances = {};
@@ -122,6 +134,10 @@ const GroupDetails = () => {
 
   if (!group) return null;
 
+  const currentUser = JSON.parse(localStorage.getItem('user'));
+  const currentUserId = currentUser ? currentUser.id : null;
+  const isCreator = group ? (group.created_by === currentUserId) : false;
+
   // Actions
   const handleEditGroupSettings = async (groupData) => {
     setLoading(true);
@@ -155,11 +171,12 @@ const GroupDetails = () => {
   };
 
   const handleRemoveMember = async (member) => {
-    if (!window.confirm(`Remove ${member} from the group?`)) return;
+    const memberName = typeof member === 'object' ? member.username || member.name : member;
+    if (!window.confirm(`Remove ${memberName} from the group?`)) return;
     setLoading(true);
     try {
-      await groupService.removeMember(id, member);
-      toast.success(`${member} removed from group`);
+      await groupService.removeMember(id, memberName);
+      toast.success(`${memberName} removed from group`);
       await loadGroupDetails();
     } catch (err) {
       console.error('Remove member failed:', err);
@@ -353,14 +370,16 @@ const GroupDetails = () => {
             <h3 className="sidebar-section-title">Balances Standing</h3>
             <div className="standings-list">
               {group.members.map((member) => {
-                const bal = debts.netBalances[member] || 0;
+                const memberName = getMemberDisplayName(member);
+                const memberKey = getMemberKey(member);
+                const bal = debts.netBalances[memberName] || 0;
                 return (
-                  <div key={member} className="standing-row-item">
+                  <div key={memberKey} className="standing-row-item">
                     <div className="standing-user-details">
                       <div className="standing-avatar">
-                        {member.charAt(0).toUpperCase()}
+                        {memberName.charAt(0).toUpperCase()}
                       </div>
-                      <span className="standing-username">{member}</span>
+                      <span className="standing-username">{memberName}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span 
@@ -373,7 +392,7 @@ const GroupDetails = () => {
                           : 'Settled'
                         }
                       </span>
-                      {isCreator && member !== 'You' && (
+                      {isCreator && memberName !== 'You' && (
                         <button
                           type="button"
                           onClick={() => handleRemoveMember(member)}

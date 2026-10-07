@@ -24,33 +24,23 @@ const mapBackendSettlementToFrontend = (settlement, groupId, membersList, curren
 
 const settlementService = {
   getSettlements: async () => {
-    try {
-      const groups = await groupService.getGroups();
-      if (!Array.isArray(groups) || groups.length === 0) {
-        return [];
-      }
-      const allSettlements = [];
-      const currentUser = JSON.parse(localStorage.getItem('user'));
-      const currentUserName = currentUser ? currentUser.name : '';
+    const groups = await groupService.getGroups();
+    if (!Array.isArray(groups) || groups.length === 0) return [];
 
-      const promises = groups.map(async (g) => {
-        try {
-          const balanceRes = await API.get(`/groups/${g.id}/balances`);
-          const response = await API.get(`/groups/${g.id}/settlements`);
-          const mapped = response.data.map(s => 
-            mapBackendSettlementToFrontend(s, g.id, balanceRes.data, currentUserName, g.name)
-          );
-          allSettlements.push(...mapped);
-        } catch (err) {
-          console.warn(`Failed to fetch settlements for group ${g.id}:`, err);
-        }
-      });
-      await Promise.all(promises);
-      return allSettlements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    } catch (error) {
-      console.error('Failed to fetch groups for settlements:', error);
-      return [];
-    }
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUserName = currentUser ? currentUser.name : '';
+    const settlementsByGroup = await Promise.all(groups.map(async (group) => {
+      const balanceResponse = await API.get(`/groups/${group.id}/balances`);
+      const response = await API.get(`/groups/${group.id}/settlements`);
+      return response.data.map(settlement => mapBackendSettlementToFrontend(
+        settlement,
+        group.id,
+        balanceResponse.data,
+        currentUserName,
+        group.name,
+      ));
+    }));
+    return settlementsByGroup.flat().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   },
 
   getSettlementsByGroupId: async (groupId) => {
@@ -82,9 +72,11 @@ const settlementService = {
 
     const memberMap = {};
     members.forEach(m => {
+      memberMap[String(m.user_id)] = m.user_id;
       memberMap[m.username.toLowerCase()] = m.user_id;
     });
     if (currentUser) {
+      memberMap[String(currentUser.id)] = currentUser.id;
       memberMap['you'] = currentUser.id;
       memberMap[currentUser.name.toLowerCase()] = currentUser.id;
     }

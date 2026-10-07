@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MdCheckCircle, MdError } from 'react-icons/md';
+import { getMemberDisplayName, getMemberKey } from '../../utils/helpers';
 
 const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares = {}, onChange }) => {
   const [customShares, setCustomShares] = useState({});
@@ -11,7 +12,8 @@ const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares =
       const equalShare = totalAmount > 0 ? Math.round((totalAmount / members.length) * 100) / 100 : 0;
       const newShares = {};
       members.forEach((m) => {
-        newShares[m] = equalShare;
+        const key = getMemberKey(m);
+        newShares[key] = equalShare;
       });
       
       // Adjust last member share slightly for rounding errors if totalAmount > 0
@@ -20,7 +22,8 @@ const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares =
         const difference = totalAmount - sumShares;
         if (difference !== 0 && members.length > 0) {
           const lastMember = members[members.length - 1];
-          newShares[lastMember] = Math.round((newShares[lastMember] + difference) * 100) / 100;
+          const lastKey = getMemberKey(lastMember);
+          newShares[lastKey] = Math.round((newShares[lastKey] + difference) * 100) / 100;
         }
       }
       onChange(newShares);
@@ -28,7 +31,11 @@ const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares =
       // Custom split: initialize with existing shares or default to 0
       const newShares = {};
       members.forEach((m) => {
-        newShares[m] = shares[m] !== undefined ? Number(shares[m]) : 0;
+        const key = getMemberKey(m);
+        const displayKey = Object.prototype.hasOwnProperty.call(shares, key)
+          ? key
+          : getMemberDisplayName(m);
+        newShares[key] = shares[displayKey] !== undefined ? Number(shares[displayKey]) : 0;
       });
       setCustomShares(newShares);
       onChange(newShares);
@@ -71,12 +78,12 @@ const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares =
           {members.map((member) => {
             const share = totalAmount > 0 ? Math.round((totalAmount / members.length) * 100) / 100 : 0;
             return (
-              <div key={member} className="split-member-row">
+              <div key={getMemberKey(member)} className="split-member-row">
                 <div className="split-member-info">
                   <div className="split-member-avatar">
-                    {member.charAt(0).toUpperCase()}
+                    {getMemberDisplayName(member).charAt(0).toUpperCase()}
                   </div>
-                  <span className="split-member-name">{member}</span>
+                  <span className="split-member-name">{getMemberDisplayName(member)}</span>
                 </div>
                 <div className="split-share-amount">
                   ₹{share.toFixed(2)}
@@ -93,12 +100,12 @@ const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares =
       ) : (
         <div className="custom-split-info">
           {members.map((member) => (
-            <div key={member} className="split-member-row">
+            <div key={getMemberKey(member)} className="split-member-row">
               <div className="split-member-info">
                 <div className="split-member-avatar">
-                  {member.charAt(0).toUpperCase()}
+                  {getMemberDisplayName(member).charAt(0).toUpperCase()}
                 </div>
-                <span className="split-member-name">{member}</span>
+                <span className="split-member-name">{getMemberDisplayName(member)}</span>
               </div>
               <div className="split-member-input-box">
                 <span className="split-currency-symbol">₹</span>
@@ -107,8 +114,8 @@ const SplitSelector = ({ members = [], amount = 0, splitType = 'equal', shares =
                   className="split-member-input"
                   placeholder="0.00"
                   step="any"
-                  value={customShares[member] === undefined ? '' : customShares[member]}
-                  onChange={(e) => handleCustomShareChange(member, e.target.value)}
+                  value={customShares[getMemberKey(member)] === undefined ? '' : customShares[getMemberKey(member)]}
+                  onChange={(e) => handleCustomShareChange(getMemberKey(member), e.target.value)}
                 />
               </div>
             </div>

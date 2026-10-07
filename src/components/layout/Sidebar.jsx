@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdDashboard, MdGroup, MdAttachMoney, MdAccountCircle, MdNotifications, MdHistory, MdPayment, MdLogout } from 'react-icons/md';
+import { MdDashboard, MdGroup, MdAttachMoney, MdAccountCircle, MdNotifications, MdHistory, MdPayment, MdLogout, MdQueryStats } from 'react-icons/md';
 import { useAuth } from '../../hooks/useAuth';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
@@ -12,6 +12,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { name: 'Groups', icon: MdGroup, path: '/groups' },
     { name: 'Expenses', icon: MdAttachMoney, path: '/expenses' },
     { name: 'Settlements', icon: MdPayment, path: '/settlements' },
+    { name: 'Analyzer', icon: MdQueryStats, path: '/analyzer' },
     { name: 'Repayment History', icon: MdHistory, path: '/history' },
     { name: 'Notifications', icon: MdNotifications, path: '/notifications' },
     { name: 'My Profile', icon: MdAccountCircle, path: '/profile' }

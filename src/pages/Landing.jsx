@@ -98,52 +98,30 @@ const Landing = () => {
           >
             <div className="preview-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-pure)' }}>Recent Group Split</span>
-                <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', padding: '4px 8px', borderRadius: '4px', fontWeight: 600 }}>Active</span>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-pure)' }}>Expense overview</span>
               </div>
-              
-              <h3 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-pure)', marginBottom: '4px', fontFamily: 'var(--font-main)' }}>₹24,500.00</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>Goa Vacation Split</p>
-              
+              <h3 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-pure)', marginBottom: '4px', fontFamily: 'var(--font-main)' }}>Groups, expenses, balances</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>Your account data, together in one place.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Priya paid</span>
-                  <span style={{ fontWeight: 600, color: 'var(--text-pure)' }}>₹12,000</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Groups</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-pure)' }}>Create or join</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Aman owes Priya</span>
-                  <span style={{ fontWeight: 600, color: 'var(--error)' }}>₹4,000</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Expenses</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-pure)' }}>Track shared costs</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>You owe Priya</span>
-                  <span style={{ fontWeight: 600, color: 'var(--error)' }}>₹4,000</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Settlements</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-pure)' }}>Record repayments</span>
                 </div>
               </div>
-              
               <div style={{ borderTop: '1px solid var(--glass-border)', marginTop: '20px', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Simplified Debts Enabled</span>
-                <span style={{ fontSize: '0.85rem', color: 'var(--accent)', fontWeight: 700 }}>✓ Auto-Balanced</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Account-specific information</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--accent)', fontWeight: 700 }}>Your activity</span>
               </div>
             </div>
           </motion.div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="stats-section">
-        <div className="stats-grid">
-          <div className="stat-item">
-            <div className="stat-number">100k+</div>
-            <div className="stat-label">Happy Users</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-number">₹50M+</div>
-            <div className="stat-label">Expenses Tracked</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-number">0%</div>
-            <div className="stat-label">Awkward Debt Talks</div>
-          </div>
         </div>
       </section>
 

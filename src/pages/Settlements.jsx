@@ -26,6 +26,7 @@ const Settlements = () => {
   const [allMembers, setAllMembers] = useState([]);
   const [globalSuggestions, setGlobalSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,6 +35,7 @@ const Settlements = () => {
   // Load details
   const loadSettlementsData = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const fetchedGroups = await groupService.getGroups();
       const fetchedSettlements = await settlementService.getSettlements();
@@ -78,6 +80,7 @@ const Settlements = () => {
       setGlobalSuggestions(suggestions);
     } catch (err) {
       console.error('Failed to load settlements:', err);
+      setLoadError(true);
       toast.error('Failed to load settlements.');
     } finally {
       setLoading(false);
@@ -145,6 +148,13 @@ const Settlements = () => {
         )}
       </header>
 
+      {loadError ? (
+        <div className="empty-state" role="alert">
+          <h3>Unable to Load Settlements</h3>
+          <p>Check your connection and try again.</p>
+          <Button onClick={loadSettlementsData} variant="secondary">Retry</Button>
+        </div>
+      ) : <>
       {/* Stats Section */}
       <section className="stats-grid">
         <StatCard 
@@ -192,6 +202,7 @@ const Settlements = () => {
           onCancel={() => setIsModalOpen(false)}
         />
       </Modal>
+      </>}
     </div>
   );
 };

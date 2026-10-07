@@ -27,7 +27,21 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem('user', JSON.stringify(loggedUser));
         } catch (error) {
           console.error('Failed to restore session:', error);
-          logout();
+          if (!error.response || error.response.status >= 500) {
+            try {
+              setUser(JSON.parse(localStorage.getItem('user')));
+            } catch {
+              setUser(null);
+            }
+            setLoading(false);
+            showToast.error('The server is unavailable. Your session is saved; retry when it is back online.');
+            return;
+          }
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setToken(null);
+          setUser(null);
+          navigate('/login');
         }
       } else {
         setUser(null);
@@ -36,7 +50,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     initializeAuth();
-  }, [token]);
+  }, [token, navigate]);
 
   const login = async (credentials) => {
     setLoading(true);
@@ -80,8 +94,9 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Registration failed:', error);
 
-      // Do not expose raw backend payloads directly to the user.
-      const detail = error.response?.data?.detail;
+      // The custom backend exception handler returns { message: "...", status_code: ... }
+      // instead of FastAPI's default { detail: "..." }, so check both keys.
+      const detail = error.response?.data?.detail || error.response?.data?.message;
 
       // Backend uses exact message "Email already exists" when an account already exists
       if (detail === 'Email already exists') {
@@ -162,13 +177,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
-    showToast.success('Successfully signed out');
-    navigate('/login');
+  const logout = async () => {
+    try {
+      if (localStorage.getItem('token')) {
+        await authService.logout();
+      }
+    } catch (error) {
+      console.error('Server logout failed:', error);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setToken(null);
+      setUser(null);
+      showToast.success('Successfully signed out');
+      navigate('/login');
+    }
   };
 
   return (

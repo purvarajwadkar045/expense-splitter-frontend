@@ -21,6 +21,7 @@ const Expenses = () => {
   const [expenses, setExpenses] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -33,6 +34,7 @@ const Expenses = () => {
   // Fetch all expenses and groups
   const loadExpensesData = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const fetchedExpenses = await expenseService.getExpenses();
       const fetchedGroups = await groupService.getGroups();
@@ -41,6 +43,7 @@ const Expenses = () => {
       setGroups(fetchedGroups);
     } catch (err) {
       console.error('Failed to load expenses list:', err);
+      setLoadError(true);
       toast.error('Failed to load expenses.');
     } finally {
       setLoading(false);
@@ -166,7 +169,13 @@ const Expenses = () => {
       </section>
 
       {/* Main Expenses Table Card */}
-      {filteredExpenses.length === 0 ? (
+      {loadError ? (
+        <div className="empty-state" role="alert">
+          <h3>Unable to Load Expenses</h3>
+          <p>Check your connection and try again.</p>
+          <Button onClick={loadExpensesData} variant="secondary">Retry</Button>
+        </div>
+      ) : filteredExpenses.length === 0 ? (
         <EmptyState
           title={searchQuery || selectedGroupFilter ? "No Results Match Filters" : "No Expenses Recorded"}
           description={searchQuery || selectedGroupFilter ? "Try adjusting your search query or group filter selection." : "Record food bills, travel tickets, or apartment rent splits to begin."}

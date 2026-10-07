@@ -10,6 +10,11 @@ const authService = {
     return response.data; // returns { access_token, token_type }
   },
 
+  logout: async () => {
+    const response = await API.post('/auth/logout');
+    return response.data;
+  },
+
   register: async (userData) => {
     // userData expects { name, email, password }
     // FastAPI UserCreate schema expects username, email, and password

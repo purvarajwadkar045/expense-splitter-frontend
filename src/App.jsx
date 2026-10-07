@@ -23,6 +23,7 @@ import History from './pages/History';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
+import Analyzer from './pages/Analyzer';
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
               <Route path="/history" element={<History />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/analyzer" element={<Analyzer />} />
             </Route>
           </Route>
 

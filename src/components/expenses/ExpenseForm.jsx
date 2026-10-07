@@ -12,8 +12,8 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
   
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
-  const [paidBy, setPaidBy] = useState('You');
-  const [category, setCategory] = useState('Others');
+  const [paidBy, setPaidBy] = useState('');
+  const [category, setCategory] = useState('Other');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
@@ -27,7 +27,7 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
       setAmount(initialData.amount || '');
       setGroupId(initialData.groupId || '');
       setPaidBy(initialData.paidBy || 'You');
-      setCategory(initialData.category || 'Others');
+      setCategory(initialData.category || 'Other');
       setNotes(initialData.notes || '');
       setDate(initialData.date || new Date().toISOString().split('T')[0]);
       setSplitType(initialData.splitType || 'equal');
@@ -41,15 +41,28 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
 
   // Update selected group details whenever groupId changes
   useEffect(() => {
-    const group = groups.find(g => g.id === groupId);
+    const group = groups.find((group) => String(group.id) === String(groupId));
     setSelectedGroup(group || null);
     if (group && !initialData) {
-      // Default paidBy to 'You' or first member if 'You' is not in group (unlikely)
+      // Default paidBy to current user's id if present, otherwise first member
       const members = group.members || [];
-      if (members.includes('You')) {
-        setPaidBy('You');
-      } else if (members.length > 0) {
-        setPaidBy(members[0]);
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      const currentUserId = currentUser ? currentUser.id : null;
+
+      if (Array.isArray(members) && members.length > 0) {
+        if (typeof members[0] === 'object') {
+          // members are objects {id, name}
+          const youMember = members.find(m => m.id === currentUserId);
+          if (youMember) setPaidBy(String(youMember.id));
+          else setPaidBy(String(members[0].id));
+        } else {
+          // members are strings
+          if (members.includes('You')) {
+            setPaidBy('You');
+          } else {
+            setPaidBy(members[0]);
+          }
+        }
       }
     }
   }, [groupId, groups, initialData]);
@@ -84,6 +97,9 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
     }
 
     const members = selectedGroup ? selectedGroup.members : ['You'];
+    const validMemberIds = Array.isArray(members)
+      ? members.filter(member => member && typeof member === 'object' && member.id != null).map(member => Number(member.id))
+      : [];
     const totalAmount = Number(amount);
 
     // Validate splits
@@ -95,11 +111,36 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
       return;
     }
 
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    let paidByValue = null;
+
+    if (paidBy === 'You') {
+      if (!currentUser) {
+        toast.error('Unable to determine the current user as payer.');
+        return;
+      }
+      paidByValue = currentUser.id;
+    } else if (typeof paidBy === 'string' && /^\d+$/.test(paidBy)) {
+      paidByValue = Number(paidBy);
+    } else if (typeof paidBy === 'number') {
+      paidByValue = paidBy;
+    }
+
+    if (paidByValue == null) {
+      toast.error('Please select a valid payer for this expense.');
+      return;
+    }
+
+    if (paidBy !== 'You' && validMemberIds.length > 0 && !validMemberIds.includes(paidByValue)) {
+      toast.error('Selected payer is not a valid member of this group.');
+      return;
+    }
+
     const expenseData = {
       groupId,
       title: title.trim(),
       amount: totalAmount,
-      paidBy,
+      paidBy: paidByValue,
       category,
       notes: notes.trim(),
       date,
@@ -162,9 +203,16 @@ const ExpenseForm = ({ groups = [], initialData = null, defaultGroupId = '', onS
             className="form-select"
             required
           >
-            {members.map(member => (
-              <option key={member} value={member}>{member}</option>
-            ))}
+            {members.map(member => {
+              if (member && typeof member === 'object') {
+                return (
+                  <option key={member.id} value={member.id}>{member.name}</option>
+                );
+              }
+              return (
+                <option key={member} value={member}>{member}</option>
+              );
+            })}
           </select>
         </div>
       </div>

@@ -85,7 +85,7 @@ This project demonstrates frontend architecture, state management, business logi
 * Responsive Layouts
 * Glassmorphism UI
 
-### Backend (Planned)
+### Backend
 
 * FastAPI
 * PostgreSQL
@@ -95,35 +95,59 @@ This project demonstrates frontend architecture, state management, business logi
 ---
 
 
-## ⚙️ Installation
+## Setup and Run
 
-Clone the repository:
+This workspace contains both `backend/` (FastAPI) and `frontend/` (React/Vite). It requires Python 3.10+, Node.js 20.19+ or 22.12+, and a running PostgreSQL server. Docker is not required. On startup, the backend creates missing tables and applies its supported additive schema upgrades; the SQL scripts under `backend/migrations/` document those changes.
 
-```bash
-git clone https://github.com/purvarajwadkar045/expense-splitter-frontend.git
+Create an empty PostgreSQL database:
+
+```powershell
+createdb -U postgres expense_splitter
 ```
 
-Navigate to the project:
+If `createdb` is not on `PATH` on Windows, use the PostgreSQL installation path (adjust the version if needed):
 
-```bash
-cd expense-splitter-frontend
+```powershell
+& "$env:ProgramFiles\PostgreSQL\18\bin\createdb.exe" -U postgres expense_splitter
 ```
 
-Install dependencies:
+Install the backend and configure its environment:
 
-```bash
-npm install
+```powershell
+cd backend
+py -3 -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-Start development server:
+Edit `backend/.env` and set `DATABASE_URL`, a unique random `SECRET_KEY`, `ALGORITHM=HS256`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `EMAIL`, and `EMAIL_PASSWORD`. SMTP credentials must be valid for registration verification and password-reset email. Never commit `.env` or use the example values as production credentials.
 
-```bash
-npm run dev
+Start the backend from `backend/`:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Build for production:
+In a second terminal, install and start the frontend:
 
-```bash
+```powershell
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+The frontend defaults to `http://localhost:8000`; set `VITE_API_BASE_URL` in `frontend/.env` if the backend uses another address. Open the Vite URL printed by the dev server.
+
+Run backend tests from the workspace root after setting the required backend environment variables:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m unittest discover -s . -p "test_*.py"
+```
+
+Build the frontend from `frontend/`:
+
+```powershell
 npm run build
 ```
 

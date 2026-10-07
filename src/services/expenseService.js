@@ -1,6 +1,46 @@
 import API from './api';
 import groupService from './groupService';
 
+const resolveUserId = (key, memberMap, currentUser) => {
+  if (typeof key === 'number') return key;
+  if (typeof key === 'string') {
+    if (/^\d+$/.test(key)) return Number(key);
+    if (key.toLowerCase() === 'you' && currentUser) return currentUser.id;
+    return memberMap[key.toLowerCase()];
+  }
+  return null;
+};
+
+const buildMemberMap = (members, currentUser) => {
+  const memberMap = {};
+  members.forEach((member) => {
+    memberMap[String(member.user_id)] = member.user_id;
+    memberMap[member.username.toLowerCase()] = member.user_id;
+  });
+  if (currentUser) {
+    memberMap[String(currentUser.id)] = currentUser.id;
+    memberMap.you = currentUser.id;
+    memberMap[currentUser.name.toLowerCase()] = currentUser.id;
+  }
+  return memberMap;
+};
+
+const buildExpenseSplits = (shares, memberMap, currentUser) => {
+  const splits = Object.entries(shares)
+    .filter(([, amount]) => Number(amount) !== 0)
+    .map(([key, amount]) => {
+      const userId = resolveUserId(key, memberMap, currentUser);
+      if (userId == null) {
+        throw new Error(`Could not resolve expense split participant: ${key}`);
+      }
+      return { user_id: userId, amount: Number(amount) };
+    });
+  if (splits.length === 0) {
+    throw new Error('At least one expense split participant is required.');
+  }
+  return splits;
+};
+
 const mapBackendExpenseToFrontend = (exp, groupId, currentUserName, groupName = '') => {
   return {
     id: exp.id,
@@ -9,8 +49,8 @@ const mapBackendExpenseToFrontend = (exp, groupId, currentUserName, groupName = 
     title: exp.title,
     amount: Number(exp.amount),
     paidBy: exp.paid_by === currentUserName ? 'You' : exp.paid_by,
-    splitType: 'equal',
-    category: 'Others', // category is frontend UI helper state
+    splitType: exp.split_type || 'equal',
+    category: exp.category || 'Other',
     date: exp.created_at ? new Date(exp.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     notes: exp.description || '',
     shares: {}
@@ -32,32 +72,24 @@ const expenseService = {
       }
       const response = await API.get(`/groups/${groupId}/expenses`);
       return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName, groupName));
-    } else {
-      try {
-        const groups = await groupService.getGroups();
-        if (!Array.isArray(groups) || groups.length === 0) {
-          return [];
-        }
-        const allExpenses = [];
-        const promises = groups.map(async (g) => {
-          try {
-            const response = await API.get(`/groups/${g.id}/expenses`);
-            const mapped = response.data.map(exp => mapBackendExpenseToFrontend(exp, g.id, currentUserName, g.name));
-            allExpenses.push(...mapped);
-          } catch (err) {
-            console.warn(`Failed to fetch expenses for group ${g.id}:`, err);
-          }
-        });
-        await Promise.all(promises);
-        return allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      } catch (error) {
-        console.error('Failed to fetch groups for expenses:', error);
-        return [];
-      }
     }
+
+    const groups = await groupService.getGroups();
+    if (!Array.isArray(groups) || groups.length === 0) return [];
+
+    const expensesByGroup = await Promise.all(groups.map(async (group) => {
+      const response = await API.get(`/groups/${group.id}/expenses`);
+      return response.data.map(exp => mapBackendExpenseToFrontend(
+        exp,
+        group.id,
+        currentUserName,
+        group.name,
+      ));
+    }));
+    return expensesByGroup.flat().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   },
 
-  getExpensesByGroupId: async (groupId) => {
+  getExpensesByGroupId: async (groupId, filters = {}) => {
     const currentUser = JSON.parse(localStorage.getItem('user'));
     const currentUserName = currentUser ? currentUser.name : '';
     let groupName = '';
@@ -67,119 +99,59 @@ const expenseService = {
     } catch (err) {
       console.warn(`Failed to fetch group details for group ${groupId}:`, err);
     }
-    const response = await API.get(`/groups/${groupId}/expenses`);
+    const params = {};
+    if (filters.search?.trim()) params.search = filters.search.trim();
+    if (filters.dateRange && filters.dateRange !== 'all') params.date_range = filters.dateRange;
+    if (filters.category && filters.category !== 'all') params.category = filters.category;
+    if (filters.memberId) params.member_id = filters.memberId;
+    if (filters.minAmount !== '' && filters.minAmount != null) params.min_amount = filters.minAmount;
+    if (filters.maxAmount !== '' && filters.maxAmount != null) params.max_amount = filters.maxAmount;
+    const response = await API.get(`/groups/${groupId}/expenses`, { params });
     return response.data.map(exp => mapBackendExpenseToFrontend(exp, groupId, currentUserName, groupName));
   },
 
   createExpense: async (expenseData) => {
     const groupId = expenseData.groupId;
-    
-    // 1. Post expense details to backend
-    const response = await API.post(`/groups/${groupId}/expenses`, {
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const balanceResponse = await API.get(`/groups/${groupId}/balances`);
+    const memberMap = buildMemberMap(balanceResponse.data, currentUser);
+    const postPayload = {
       title: expenseData.title,
       amount: Number(expenseData.amount),
-      description: expenseData.notes || ''
-    });
-    const createdExpense = response.data; // ExpenseResponse
-    const expenseId = createdExpense.id;
-
-    // 2. Fetch group balances to map member usernames to user IDs
-    try {
-      const balanceRes = await API.get(`/groups/${groupId}/balances`);
-      const members = balanceRes.data;
-      const currentUser = JSON.parse(localStorage.getItem('user'));
-      
-      const memberMap = {};
-      members.forEach(m => {
-        memberMap[m.username.toLowerCase()] = m.user_id;
-      });
-      if (currentUser) {
-        memberMap['you'] = currentUser.id;
-        memberMap[currentUser.name.toLowerCase()] = currentUser.id;
-      }
-
-      // If no custom splits, use all group members
-      const groupData = await groupService.getGroupById(groupId);
-      const participantNames = Object.keys(expenseData.shares || {}).length > 0 
-        ? Object.keys(expenseData.shares) 
-        : (groupData?.members || []);
-
-      const participants = [];
-      participantNames.forEach(name => {
-        if (name === 'You' && currentUser) {
-          participants.push(currentUser.id);
-        } else {
-          const uid = memberMap[name.toLowerCase()];
-          if (uid) {
-            participants.push(uid);
-          }
-        }
-      });
-
-      if (participants.length > 0) {
-        // Update split participants using PUT
-        await API.put(`/expenses/${expenseId}`, {
-          participants
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to assign splits on backend creation:', err);
+      description: expenseData.notes || '',
+      category: expenseData.category || 'Other'
+    };
+    if (expenseData.paidBy !== undefined && expenseData.paidBy !== null) {
+      postPayload.paid_by = Number(expenseData.paidBy);
+    }
+    if (Object.keys(expenseData.shares || {}).length > 0) {
+      postPayload.splits = buildExpenseSplits(expenseData.shares, memberMap, currentUser);
     }
 
-    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const response = await API.post(`/groups/${groupId}/expenses`, postPayload);
     const currentUserName = currentUser ? currentUser.name : '';
-    return mapBackendExpenseToFrontend(createdExpense, groupId, currentUserName);
+    return mapBackendExpenseToFrontend(response.data, groupId, currentUserName);
   },
 
   updateExpense: async (id, expenseData) => {
     const groupId = expenseData.groupId;
-    let participants = null;
-
-    try {
-      const balanceRes = await API.get(`/groups/${groupId}/balances`);
-      const members = balanceRes.data;
-      const currentUser = JSON.parse(localStorage.getItem('user'));
-      
-      const memberMap = {};
-      members.forEach(m => {
-        memberMap[m.username.toLowerCase()] = m.user_id;
-      });
-      if (currentUser) {
-        memberMap['you'] = currentUser.id;
-        memberMap[currentUser.name.toLowerCase()] = currentUser.id;
-      }
-
-      const groupData = await groupService.getGroupById(groupId);
-      const participantNames = Object.keys(expenseData.shares || {}).length > 0 
-        ? Object.keys(expenseData.shares) 
-        : (groupData?.members || []);
-
-      participants = [];
-      participantNames.forEach(name => {
-        if (name === 'You' && currentUser) {
-          participants.push(currentUser.id);
-        } else {
-          const uid = memberMap[name.toLowerCase()];
-          if (uid) {
-            participants.push(uid);
-          }
-        }
-      });
-    } catch (err) {
-      console.warn('Failed to map user IDs during update:', err);
-    }
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const balanceResponse = await API.get(`/groups/${groupId}/balances`);
+    const memberMap = buildMemberMap(balanceResponse.data, currentUser);
 
     const payload = {
       title: expenseData.title,
       amount: Number(expenseData.amount),
-      description: expenseData.notes || ''
+      description: expenseData.notes || '',
+      category: expenseData.category || 'Other'
     };
-    if (participants && participants.length > 0) {
-      payload.participants = participants;
+    if (Object.keys(expenseData.shares || {}).length > 0) {
+      payload.splits = buildExpenseSplits(expenseData.shares, memberMap, currentUser);
+    } else {
+      payload.participants = balanceResponse.data.map((member) => member.user_id);
     }
 
     const response = await API.put(`/expenses/${id}`, payload);
-    const currentUser = JSON.parse(localStorage.getItem('user'));
     const currentUserName = currentUser ? currentUser.name : '';
     return mapBackendExpenseToFrontend(response.data, groupId, currentUserName);
   },

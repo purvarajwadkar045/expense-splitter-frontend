@@ -13,6 +13,7 @@ import './styles/dashboard.css';
 import './styles/landing.css';
 import './styles/profile.css';
 import './styles/notifications.css';
+import './styles/analyzer.css';
 
 import { Toaster } from 'react-hot-toast';
 
